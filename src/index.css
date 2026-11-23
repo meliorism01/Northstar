@@ -1,0 +1,77 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    font-family: 'Inter', 'Open Sans', system-ui, sans-serif;
+    color: #4b5563;
+    background-color: #ffffff;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Roboto Slab', Georgia, serif;
+    color: #1c202e;
+  }
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Architectural section eyebrow for public landing page */
+.ordexa-eyebrow {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1rem;
+}
+
+.ordexa-eyebrow::before {
+  content: '';
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  background-color: #c9b38c;
+  flex-shrink: 0;
+}
+
+/* Outlined architectural step numerals */
+.ordexa-outline-num {
+  font-family: 'Roboto Slab', serif;
+  color: #ffffff;
+  -webkit-text-stroke: 1.5px #c9b38c;
+  text-shadow:
+    -1px -1px 0 #c9b38c,
+     1px -1px 0 #c9b38c,
+    -1px  1px 0 #c9b38c,
+     1px  1px 0 #c9b38c;
+}
+
+/* Subtle enterprise scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f0f0;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c5c9d2;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #262b3e;
+}

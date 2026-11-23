@@ -1,0 +1,32 @@
+import React from 'react';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { LandingPage } from './pages/LandingPage';
+import { AppShell } from './layouts/AppShell';
+import { DashboardPage } from './pages/DashboardPage';
+import { OrdersPage } from './pages/OrdersPage';
+import { CustomerGraphPage } from './pages/CustomerGraphPage';
+import { RescueCentrePage } from './pages/RescueCentrePage';
+import { NdrRecoveryPage } from './pages/NdrRecoveryPage';
+import { AnalyticsPage } from './pages/AnalyticsPage';
+import { SettingsPage } from './pages/SettingsPage';
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/app" element={<AppShell />}>
+          <Route index element={<Navigate to="/app/dashboard" replace />} />
+          <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="orders" element={<OrdersPage />} />
+          <Route path="graph" element={<CustomerGraphPage />} />
+          <Route path="rescue" element={<RescueCentrePage />} />
+          <Route path="ndr" element={<NdrRecoveryPage />} />
+          <Route path="analytics" element={<AnalyticsPage />} />
+          <Route path="settings" element={<SettingsPage />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
