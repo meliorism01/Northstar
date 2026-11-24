@@ -31,6 +31,12 @@ function makeInitialState() {
     selectedOrderId: 'ORD-26410',
     selectedCustomerId: 'CUST-101',
     globalSearch: '',
+    notificationPrefs: {
+      whatsappOutreachAlerts: true,
+      highRiskDigest: true,
+      ndrAttemptTwoAlert: true,
+      weeklyRoiSummary: false,
+    },
     notifications: [
       {
         id: 'NOTIF-1',
@@ -84,6 +90,21 @@ export const useOrdexaStore = create(
       setSelectedOrderId: (id) => set({ selectedOrderId: id }),
       setSelectedCustomerId: (id) => set({ selectedCustomerId: id }),
 
+      updateNotificationPref: (key, value) => {
+        set((s) => ({
+          notificationPrefs: {
+            ...(s.notificationPrefs || {
+              whatsappOutreachAlerts: true,
+              highRiskDigest: true,
+              ndrAttemptTwoAlert: true,
+              weeklyRoiSummary: false,
+            }),
+            [key]: value,
+          },
+        }));
+        get().addToast('Notification preference updated', 'info');
+      },
+
       markAllNotificationsRead: () =>
         set((state) => ({
           notifications: state.notifications.map((n) => ({ ...n, read: true })),
@@ -121,18 +142,18 @@ export const useOrdexaStore = create(
 
         const outgoingMsg = !isDirectApprove
           ? {
-              id: `MSG-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
-              sender: 'merchant',
-              channel: 'WhatsApp',
-              text:
-                order.recommendedIntervention === 'Address Clarification'
-                  ? `Hello ${order.customerName.split(' ')[0]}! Please confirm your ${order.store} order ${order.id} of ₹${order.orderValue.toLocaleString('en-IN')} and share a nearby delivery landmark for ${order.address.line1}, ${order.address.city}.`
-                  : order.recommendedIntervention === 'Optional Partial Advance'
+            id: `MSG-${Date.now()}-${Math.random().toString(36).slice(2, 5)}`,
+            sender: 'merchant',
+            channel: 'WhatsApp',
+            text:
+              order.recommendedIntervention === 'Address Clarification'
+                ? `Hello ${order.customerName.split(' ')[0]}! Please confirm your ${order.store} order ${order.id} of ₹${order.orderValue.toLocaleString('en-IN')} and share a nearby delivery landmark for ${order.address.line1}, ${order.address.city}.`
+                : order.recommendedIntervention === 'Optional Partial Advance'
                   ? `Hello ${order.customerName.split(' ')[0]}! For your high-value COD order ${order.id} (₹${order.orderValue.toLocaleString('en-IN')}), pay an optional ₹150 UPI advance now to unlock ₹${state.automationRules.partialPrepaidIncentive} instant discount & priority dispatch.`
                   : `Hello ${order.customerName.split(' ')[0]}! Please tap Confirm below to dispatch your ${order.store} COD order ${order.id} (₹${order.orderValue.toLocaleString('en-IN')}).`,
-              timestamp: ts,
-              deliveryStatus: 'Delivered (Simulated)',
-            }
+            timestamp: ts,
+            deliveryStatus: 'Delivered (Simulated)',
+          }
           : null;
 
         set((s) => ({
@@ -140,20 +161,20 @@ export const useOrdexaStore = create(
           orders: s.orders.map((o) =>
             o.id === orderId
               ? {
-                  ...o,
-                  status: nextStatus,
-                  messages: outgoingMsg ? [...(o.messages || []), outgoingMsg] : o.messages || [],
-                  history: [
-                    {
-                      timestamp: ts,
-                      type: isDirectApprove ? 'Approved for Dispatch' : 'Intervention Dispatched',
-                      detail: isDirectApprove
-                        ? `Merchant approved ${order.id} directly for courier manifest.`
-                        : `Merchant approved "${order.recommendedIntervention}" (Est. cost ₹${costAdded.toFixed(2)}).`,
-                    },
-                    ...(o.history || []),
-                  ],
-                }
+                ...o,
+                status: nextStatus,
+                messages: outgoingMsg ? [...(o.messages || []), outgoingMsg] : o.messages || [],
+                history: [
+                  {
+                    timestamp: ts,
+                    type: isDirectApprove ? 'Approved for Dispatch' : 'Intervention Dispatched',
+                    detail: isDirectApprove
+                      ? `Merchant approved ${order.id} directly for courier manifest.`
+                      : `Merchant approved "${order.recommendedIntervention}" (Est. cost ₹${costAdded.toFixed(2)}).`,
+                  },
+                  ...(o.history || []),
+                ],
+              }
               : o
           ),
           activity: [
@@ -189,13 +210,13 @@ export const useOrdexaStore = create(
           orders: s.orders.map((o) =>
             o.id === orderId
               ? {
-                  ...o,
-                  status: overrideStatus,
-                  history: [
-                    { timestamp: ts, type: 'Merchant Override', detail: note },
-                    ...(o.history || []),
-                  ],
-                }
+                ...o,
+                status: overrideStatus,
+                history: [
+                  { timestamp: ts, type: 'Merchant Override', detail: note },
+                  ...(o.history || []),
+                ],
+              }
               : o
           ),
           activity: [
@@ -219,13 +240,13 @@ export const useOrdexaStore = create(
           orders: s.orders.map((o) =>
             o.id === orderId
               ? {
-                  ...o,
-                  status: 'Held for Review',
-                  history: [
-                    { timestamp: ts, type: 'Held for Review', detail: reason },
-                    ...(o.history || []),
-                  ],
-                }
+                ...o,
+                status: 'Held for Review',
+                history: [
+                  { timestamp: ts, type: 'Held for Review', detail: reason },
+                  ...(o.history || []),
+                ],
+              }
               : o
           ),
           activity: [
@@ -249,14 +270,14 @@ export const useOrdexaStore = create(
           orders: s.orders.map((o) =>
             o.id === orderId
               ? {
-                  ...o,
-                  status: 'Cancelled',
-                  rescued: false,
-                  history: [
-                    { timestamp: ts, type: 'Order Cancelled', detail: reason },
-                    ...(o.history || []),
-                  ],
-                }
+                ...o,
+                status: 'Cancelled',
+                rescued: false,
+                history: [
+                  { timestamp: ts, type: 'Order Cancelled', detail: reason },
+                  ...(o.history || []),
+                ],
+              }
               : o
           ),
           activity: [
@@ -325,28 +346,28 @@ export const useOrdexaStore = create(
           orders: s.orders.map((o) =>
             o.id === orderId
               ? {
-                  ...o,
-                  status: o.status === 'Pending Verification' ? 'Awaiting Customer' : o.status,
-                  messages: [
-                    ...(o.messages || []),
-                    {
-                      id: `MSG-${Date.now()}`,
-                      sender: 'merchant',
-                      channel,
-                      text,
-                      timestamp: ts,
-                      deliveryStatus: `Delivered via ${channel} (Simulated)`,
-                    },
-                  ],
-                  history: [
-                    {
-                      timestamp: ts,
-                      type: `${channel} Outreach`,
-                      detail: `Sent simulated ${channel} message (₹${channelCost.toFixed(2)}).`,
-                    },
-                    ...(o.history || []),
-                  ],
-                }
+                ...o,
+                status: o.status === 'Pending Verification' ? 'Awaiting Customer' : o.status,
+                messages: [
+                  ...(o.messages || []),
+                  {
+                    id: `MSG-${Date.now()}`,
+                    sender: 'merchant',
+                    channel,
+                    text,
+                    timestamp: ts,
+                    deliveryStatus: `Delivered via ${channel} (Simulated)`,
+                  },
+                ],
+                history: [
+                  {
+                    timestamp: ts,
+                    type: `${channel} Outreach`,
+                    detail: `Sent simulated ${channel} message (₹${channelCost.toFixed(2)}).`,
+                  },
+                  ...(o.history || []),
+                ],
+              }
               : o
           ),
         }));
@@ -409,24 +430,24 @@ export const useOrdexaStore = create(
           const nextAddresses =
             replyType === 'UPDATE_LANDMARK'
               ? [
-                  {
-                    id: `ADDR-${Date.now()}`,
-                    ...updatedAddress,
-                    status: 'Verified',
-                    updatedAt: ts,
-                  },
-                  ...c.addresses.filter((a) => a.line1 !== updatedAddress.line1),
-                ]
+                {
+                  id: `ADDR-${Date.now()}`,
+                  ...updatedAddress,
+                  status: 'Verified',
+                  updatedAt: ts,
+                },
+                ...c.addresses.filter((a) => a.line1 !== updatedAddress.line1),
+              ]
               : c.addresses;
           const nextAddrHistory =
             replyType === 'UPDATE_LANDMARK'
               ? [
-                  {
-                    date: ts,
-                    change: `Customer updated landmark to "${updatedAddress.landmark}" via Communication Sandbox`,
-                  },
-                  ...(c.addressHistory || []),
-                ]
+                {
+                  date: ts,
+                  change: `Customer updated landmark to "${updatedAddress.landmark}" via Communication Sandbox`,
+                },
+                ...(c.addressHistory || []),
+              ]
               : c.addressHistory || [];
 
           return {
@@ -502,13 +523,13 @@ export const useOrdexaStore = create(
           orders: s.orders.map((o) =>
             o.id === orderId
               ? {
-                  ...o,
-                  status: 'Dispatched',
-                  history: [
-                    { timestamp: ts, type: 'Dispatched', detail: `Manifested with ${o.courier} for line-haul.` },
-                    ...(o.history || []),
-                  ],
-                }
+                ...o,
+                status: 'Dispatched',
+                history: [
+                  { timestamp: ts, type: 'Dispatched', detail: `Manifested with ${o.courier} for line-haul.` },
+                  ...(o.history || []),
+                ],
+              }
               : o
           ),
           activity: [
@@ -571,17 +592,17 @@ export const useOrdexaStore = create(
           orders: s.orders.map((o) =>
             o.id === orderId
               ? {
-                  ...o,
-                  status: outcome,
-                  history: [
-                    {
-                      timestamp: ts,
-                      type: `Outcome: ${outcome}`,
-                      detail: `Delivery outcome recorded as ${outcome}. Customer Intelligence Graph updated.`,
-                    },
-                    ...(o.history || []),
-                  ],
-                }
+                ...o,
+                status: outcome,
+                history: [
+                  {
+                    timestamp: ts,
+                    type: `Outcome: ${outcome}`,
+                    detail: `Delivery outcome recorded as ${outcome}. Customer Intelligence Graph updated.`,
+                  },
+                  ...(o.history || []),
+                ],
+              }
               : o
           ),
           activity: [
@@ -619,13 +640,13 @@ export const useOrdexaStore = create(
           ndrCases: s.ndrCases.map((n) =>
             n.id === ndrId
               ? {
-                  ...n,
-                  recoveryStatus: nextStatus,
-                  lastAction: `${actionLabel} (${new Date().toLocaleTimeString('en-IN', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })})`,
-                }
+                ...n,
+                recoveryStatus: nextStatus,
+                lastAction: `${actionLabel} (${new Date().toLocaleTimeString('en-IN', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                })})`,
+              }
               : n
           ),
           activity: [
@@ -653,28 +674,28 @@ export const useOrdexaStore = create(
           ndrCases: s.ndrCases.map((n) =>
             n.id === ndrId
               ? {
-                  ...n,
-                  customerResponse: customerReplyText,
-                  recoveryStatus: 'Recovered',
-                  lastAction: 'Re-attempt succeeded after customer confirmation',
-                }
+                ...n,
+                customerResponse: customerReplyText,
+                recoveryStatus: 'Recovered',
+                lastAction: 'Re-attempt succeeded after customer confirmation',
+              }
               : n
           ),
           orders: s.orders.map((o) =>
             o.id === target.orderId
               ? {
-                  ...o,
-                  status: 'Delivered',
-                  rescued: true,
-                  history: [
-                    {
-                      timestamp: ts,
-                      type: 'NDR Recovered',
-                      detail: `Recovered via customer input: "${customerReplyText}". Delivered!`,
-                    },
-                    ...(o.history || []),
-                  ],
-                }
+                ...o,
+                status: 'Delivered',
+                rescued: true,
+                history: [
+                  {
+                    timestamp: ts,
+                    type: 'NDR Recovered',
+                    detail: `Recovered via customer input: "${customerReplyText}". Delivered!`,
+                  },
+                  ...(o.history || []),
+                ],
+              }
               : o
           ),
           customers: s.customers.map((c) =>
@@ -995,11 +1016,11 @@ export const useOrdexaStore = create(
           stores: s.stores.map((st) =>
             st.id === storeId
               ? {
-                  ...st,
-                  webhookActive: !st.webhookActive,
-                  status: !st.webhookActive ? 'Connected (Simulated)' : 'Paused',
-                  lastSync: nowIso(),
-                }
+                ...st,
+                webhookActive: !st.webhookActive,
+                status: !st.webhookActive ? 'Connected (Simulated)' : 'Paused',
+                lastSync: nowIso(),
+              }
               : st
           ),
         })),

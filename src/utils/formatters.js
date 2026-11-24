@@ -51,26 +51,26 @@ export function getAttentionStyles(level) {
   switch (level) {
     case 'HIGH':
       return {
-        bg: 'bg-red-50',
-        text: 'text-red-700',
-        border: 'border-red-200',
-        dot: 'bg-red-600',
+        bg: 'bg-[#FFF1EC]',
+        text: 'text-[#E05328]',
+        border: 'border-[#FDD6C8]',
+        dot: 'bg-[#FA6E43]',
         label: 'HIGH ATTENTION',
       };
     case 'MEDIUM':
       return {
-        bg: 'bg-amber-50',
-        text: 'text-amber-800',
-        border: 'border-amber-200',
-        dot: 'bg-amber-500',
+        bg: 'bg-[#FFF5FA]',
+        text: 'text-[#C2418B]',
+        border: 'border-[#FBCFE8]',
+        dot: 'bg-[#FF9FD7]',
         label: 'MEDIUM ATTENTION',
       };
     default:
       return {
-        bg: 'bg-emerald-50',
-        text: 'text-emerald-700',
-        border: 'border-emerald-200',
-        dot: 'bg-emerald-600',
+        bg: 'bg-[#EEF6FF]',
+        text: 'text-[#4A78D6]',
+        border: 'border-[#D5E5FE]',
+        dot: 'bg-[#7584D6]',
         label: 'LOW ATTENTION',
       };
   }
@@ -78,15 +78,15 @@ export function getAttentionStyles(level) {
 
 export function getStatusStyles(status) {
   const map = {
-    'Pending Verification': 'bg-amber-50 text-amber-800 border-amber-200',
-    'Awaiting Customer': 'bg-blue-50 text-blue-700 border-blue-200',
-    'Held for Review': 'bg-red-50 text-red-700 border-red-200',
-    'Ready for Dispatch': 'bg-emerald-50 text-emerald-700 border-emerald-200',
-    Dispatched: 'bg-indigo-50 text-indigo-700 border-indigo-200',
-    'NDR Open': 'bg-orange-50 text-orange-800 border-orange-200',
-    Delivered: 'bg-emerald-100 text-emerald-800 border-emerald-300',
-    RTO: 'bg-rose-100 text-rose-800 border-rose-300',
-    Cancelled: 'bg-slate-100 text-slate-600 border-slate-200',
+    'Pending Verification': 'bg-[#FFF5ED] text-[#D96030] border-[#FDE0CA]',
+    'Awaiting Customer': 'bg-[#ECFAFF] text-[#1D82A8] border-[#C5EEFD]',
+    'Held for Review': 'bg-[#FFF0F8] text-[#B83B82] border-[#FAD1E8]',
+    'Ready for Dispatch': 'bg-[#EEF2FF] text-[#545C9E] border-[#DFE1F5]',
+    Dispatched: 'bg-[#F1F2F9] text-[#465478] border-[#DFE1F5]',
+    'NDR Open': 'bg-[#FFF1EC] text-[#E05328] border-[#FDD6C8]',
+    Delivered: 'bg-[#ECFEF6] text-[#17825B] border-[#C3F3DE]',
+    RTO: 'bg-[#FFF0F2] text-[#D13B56] border-[#FECDD6]',
+    Cancelled: 'bg-[#F4F5F9] text-[#7D859B] border-[#E3E6F0]',
   };
-  return map[status] || 'bg-slate-100 text-slate-700 border-slate-200';
+  return map[status] || 'bg-[#F1F2F9] text-[#465478] border-[#DFE1F5]';
 }

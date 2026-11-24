@@ -1,215 +1,241 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Link } from 'react-router-dom';
-import { Calculator, ArrowRight, Info } from 'lucide-react';
-import { Button, SectionEyebrow } from '../ui/Primitives';
+import { Calculator, TrendingUp, ShieldCheck, ArrowRight, Info } from 'lucide-react';
+import { Button, IconTile, SectionEyebrow } from '../ui/Primitives';
 import { formatINR, formatNumber } from '../../utils/formatters';
 
 export function RoiCalculator() {
-  const [monthlyOrders, setMonthlyOrders] = useState(4000);
-  const [codPercent, setCodPercent] = useState(68);
-  const [aov, setAov] = useState(1850);
-  const [rtoRate, setRtoRate] = useState(24);
-  const [forwardCost, setForwardCost] = useState(68);
-  const [reverseCost, setReverseCost] = useState(74);
+  const [monthlyOrders, setMonthlyOrders] = useState(6000);
+  const [codShare, setCodShare] = useState(68);
+  const [baselineRtoRate, setBaselineRtoRate] = useState(24);
+  const [avgFreightRtoCost, setAvgFreightRtoCost] = useState(165);
+  const [inventoryHandlingCost, setInventoryHandlingCost] = useState(45);
+  const [rescueEfficiency, setRescueEfficiency] = useState(32);
 
-  const codOrders = Math.round((monthlyOrders * codPercent) / 100);
-  const monthlyRtoOrders = Math.round((codOrders * rtoRate) / 100);
-  const perRtoLogisticsLoss = forwardCost + reverseCost + 35; // +₹35 avg COD handling & packaging
-  const monthlyLogisticsLeakage = monthlyRtoOrders * perRtoLogisticsLoss;
+  const metrics = useMemo(() => {
+    const codOrders = Math.round((monthlyOrders * codShare) / 100);
+    const baselineRtoOrders = Math.round((codOrders * baselineRtoRate) / 100);
+    const costPerRto = avgFreightRtoCost + inventoryHandlingCost;
+    const monthlyRtoLeakage = baselineRtoOrders * costPerRto;
 
-  // Conservative modeled assumption: 28% RTO reduction via pre-dispatch & NDR rescue
-  const modeledReductionRate = 0.28;
-  const ordersRescuedEst = Math.round(monthlyRtoOrders * modeledReductionRate);
-  const estMessagingCost = Math.round(codOrders * 0.45 * 0.9); // ~45% COD orders need light outreach at ₹0.90
-  const monthlyGrossSavings = ordersRescuedEst * perRtoLogisticsLoss;
-  const monthlyNetSavings = Math.max(0, monthlyGrossSavings - estMessagingCost);
-  const annualNetSavings = monthlyNetSavings * 12;
-  const revenueProtected = ordersRescuedEst * aov;
+    const flaggedOrders = Math.round(codOrders * 0.38);
+    const outreachSpend = Math.round(flaggedOrders * 1.05);
+
+    const preventedRtos = Math.round((baselineRtoOrders * rescueEfficiency) / 100);
+    const grossFreightProtected = preventedRtos * costPerRto;
+    const netMonthlySavings = Math.max(0, grossFreightProtected - outreachSpend);
+    const annualRunRate = netMonthlySavings * 12;
+    const newRtoRate =
+      codOrders > 0
+        ? Math.max(0, ((baselineRtoOrders - preventedRtos) / codOrders) * 100)
+        : 0;
+
+    return {
+      codOrders,
+      baselineRtoOrders,
+      costPerRto,
+      monthlyRtoLeakage,
+      outreachSpend,
+      preventedRtos,
+      netMonthlySavings,
+      annualRunRate,
+      newRtoRate,
+    };
+  }, [
+    monthlyOrders,
+    codShare,
+    baselineRtoRate,
+    avgFreightRtoCost,
+    inventoryHandlingCost,
+    rescueEfficiency,
+  ]);
+
+  const sliders = [
+    {
+      label: 'Monthly Store Orders',
+      valueDisplay: `${formatNumber(monthlyOrders)} orders`,
+      min: 500,
+      max: 50000,
+      step: 500,
+      value: monthlyOrders,
+      onChange: setMonthlyOrders,
+    },
+    {
+      label: 'Cash-on-Delivery (COD) Share',
+      valueDisplay: `${codShare}%`,
+      min: 20,
+      max: 95,
+      step: 1,
+      value: codShare,
+      onChange: setCodShare,
+    },
+    {
+      label: 'Current COD RTO Rate',
+      valueDisplay: `${baselineRtoRate}%`,
+      min: 8,
+      max: 45,
+      step: 1,
+      value: baselineRtoRate,
+      onChange: setBaselineRtoRate,
+    },
+    {
+      label: 'Forward + Reverse Freight per RTO',
+      valueDisplay: formatINR(avgFreightRtoCost),
+      min: 90,
+      max: 350,
+      step: 5,
+      value: avgFreightRtoCost,
+      onChange: setAvgFreightRtoCost,
+    },
+    {
+      label: 'Packaging & Inventory Lockup per RTO',
+      valueDisplay: formatINR(inventoryHandlingCost),
+      min: 15,
+      max: 180,
+      step: 5,
+      value: inventoryHandlingCost,
+      onChange: setInventoryHandlingCost,
+    },
+    {
+      label: 'Estimated RTO Reduction (Conservative)',
+      valueDisplay: `${rescueEfficiency}%`,
+      min: 15,
+      max: 50,
+      step: 1,
+      value: rescueEfficiency,
+      onChange: setRescueEfficiency,
+    },
+  ];
 
   return (
-    <section id="roi-calculator" className="py-20 bg-surface-muted border-y border-slate-200">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="max-w-2xl mb-12">
-          <SectionEyebrow className="mb-3">Financial Impact Estimator</SectionEyebrow>
-          <h2 className="font-serif text-3xl md:text-4xl font-bold text-navy">
-            Quantify Your Monthly RTO Logistics Leakage
+    <section id="roi-calculator" className="py-20 px-4 sm:px-8 relative">
+      <div className="max-w-[1220px] mx-auto">
+        <div className="text-center max-w-2xl mx-auto mb-12">
+          <SectionEyebrow>Unit Economics Simulator</SectionEyebrow>
+          <h2 className="mt-4 font-display text-[32px] sm:text-[42px] font-extrabold text-[#465478] tracking-[-0.035em] leading-[1.12]">
+            Quantify your preventable{' '}
+            <span className="rescale-gradient-text">RTO freight</span> leakage.
           </h2>
-          <p className="mt-3 text-slateMuted">
-            Adjust your store metrics below to model forward + reverse freight leakage and
-            estimated net savings from proportionate pre-dispatch interventions.
+          <p className="mt-3 text-[15px] text-[#6E7896] leading-relaxed">
+            Model forward + reverse courier freight, packaging burn, and WhatsApp verification spend transparently before deploying rules.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
-          {/* Sliders Panel */}
-          <div className="lg:col-span-7 bg-white border border-slate-200 p-6 md:p-8 shadow-card">
-            <div className="flex items-center gap-2 pb-4 mb-6 border-b border-slate-200">
-              <Calculator className="w-5 h-5 text-gold-hover" />
-              <h3 className="font-serif text-lg font-bold text-navy">Your Store Parameters</h3>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+          {/* Left: 6 Interactive Sliders Card */}
+          <div className="lg:col-span-7 rescale-card p-6 sm:p-8 flex flex-col justify-between">
+            <div className="flex items-center gap-3 pb-5 border-b border-[#F1F2F9]">
+              <IconTile icon={Calculator} tone="peri" size="md" />
               <div>
-                <div className="flex justify-between text-xs font-semibold mb-2">
-                  <span className="text-navy">Monthly Orders</span>
-                  <span className="font-mono text-gold-hover">{formatNumber(monthlyOrders)}</span>
-                </div>
-                <input
-                  type="range"
-                  min="500"
-                  max="25000"
-                  step="500"
-                  value={monthlyOrders}
-                  onChange={(e) => setMonthlyOrders(Number(e.target.value))}
-                  className="w-full accent-[#262B3E]"
-                />
-              </div>
-
-              <div>
-                <div className="flex justify-between text-xs font-semibold mb-2">
-                  <span className="text-navy">COD Share (%)</span>
-                  <span className="font-mono text-gold-hover">{codPercent}%</span>
-                </div>
-                <input
-                  type="range"
-                  min="20"
-                  max="95"
-                  step="1"
-                  value={codPercent}
-                  onChange={(e) => setCodPercent(Number(e.target.value))}
-                  className="w-full accent-[#262B3E]"
-                />
-              </div>
-
-              <div>
-                <div className="flex justify-between text-xs font-semibold mb-2">
-                  <span className="text-navy">Average Order Value (AOV)</span>
-                  <span className="font-mono text-gold-hover">{formatINR(aov)}</span>
-                </div>
-                <input
-                  type="range"
-                  min="499"
-                  max="6000"
-                  step="50"
-                  value={aov}
-                  onChange={(e) => setAov(Number(e.target.value))}
-                  className="w-full accent-[#262B3E]"
-                />
-              </div>
-
-              <div>
-                <div className="flex justify-between text-xs font-semibold mb-2">
-                  <span className="text-navy">Current COD RTO Rate</span>
-                  <span className="font-mono text-red-600">{rtoRate}%</span>
-                </div>
-                <input
-                  type="range"
-                  min="8"
-                  max="45"
-                  step="1"
-                  value={rtoRate}
-                  onChange={(e) => setRtoRate(Number(e.target.value))}
-                  className="w-full accent-[#262B3E]"
-                />
-              </div>
-
-              <div>
-                <div className="flex justify-between text-xs font-semibold mb-2">
-                  <span className="text-navy">Avg. Forward Shipping</span>
-                  <span className="font-mono text-gold-hover">{formatINR(forwardCost)}</span>
-                </div>
-                <input
-                  type="range"
-                  min="35"
-                  max="180"
-                  step="2"
-                  value={forwardCost}
-                  onChange={(e) => setForwardCost(Number(e.target.value))}
-                  className="w-full accent-[#262B3E]"
-                />
-              </div>
-
-              <div>
-                <div className="flex justify-between text-xs font-semibold mb-2">
-                  <span className="text-navy">Avg. Reverse Shipping</span>
-                  <span className="font-mono text-gold-hover">{formatINR(reverseCost)}</span>
-                </div>
-                <input
-                  type="range"
-                  min="35"
-                  max="200"
-                  step="2"
-                  value={reverseCost}
-                  onChange={(e) => setReverseCost(Number(e.target.value))}
-                  className="w-full accent-[#262B3E]"
-                />
+                <h3 className="font-display text-[17px] font-bold text-[#465478]">
+                  Storefront Volume &amp; Freight Inputs
+                </h3>
+                <p className="text-[12.5px] text-[#8891AA]">
+                  Drag sliders to match your Indian D2C shipping profile
+                </p>
               </div>
             </div>
 
-            <div className="mt-6 p-4 bg-gold-subtle/70 border border-gold/40 flex items-start gap-3">
-              <Info className="w-4 h-4 text-navy flex-shrink-0 mt-0.5" />
-              <p className="text-xs text-navy/80 leading-relaxed">
-                <strong>Model Assumptions vs. Actual Merchant Results:</strong> Projections assume a
-                conservative <strong>28% reduction</strong> in avoidable COD RTOs, ₹35 avg COD
-                handling/packaging per failed shipment, and ₹0.90/message on ~45% flagged COD
-                orders. Actual results vary by category, PIN-code mix, and courier SLA.
-              </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-7 gap-y-6 py-6">
+              {sliders.map((s) => (
+                <div key={s.label}>
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <label className="text-[12.5px] font-display font-semibold text-[#5C6888]">
+                      {s.label}
+                    </label>
+                    <span className="font-display text-[13px] font-extrabold text-[#465478] bg-[#F1F2F9] px-2.5 py-0.5 rounded-full num">
+                      {s.valueDisplay}
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={s.min}
+                    max={s.max}
+                    step={s.step}
+                    value={s.value}
+                    onChange={(e) => s.onChange(Number(e.target.value))}
+                  />
+                </div>
+              ))}
+            </div>
+
+            <div className="rounded-[16px] bg-[#F4F5FC] border border-[#E3E6FA] px-4 py-3 flex items-start gap-2.5 text-[12px] text-[#5C6888]">
+              <Info className="w-4 h-4 text-[#7584D6] flex-shrink-0 mt-0.5" />
+              <span>
+                ORDEXA deducts estimated WhatsApp/SMS outreach costs ({formatINR(metrics.outreachSpend)}/mo) from gross freight protected so savings remain conservative and audit-ready.
+              </span>
             </div>
           </div>
 
-          {/* Output Panel */}
-          <div className="lg:col-span-5 bg-navy text-white p-6 md:p-8 flex flex-col justify-between border-t-4 border-t-gold">
-            <div>
-              <div className="text-[11px] uppercase tracking-[0.18em] text-gold font-semibold">
-                Modeled Financial Snapshot
+          {/* Right: Rescale Featured Savings Summary Card */}
+          <div className="lg:col-span-5 rounded-[26px] p-6 sm:p-8 bg-white border border-[#DFE1F5] shadow-panel flex flex-col justify-between relative overflow-hidden">
+            <img
+              src="/template-assets/pastel-glow.png"
+              alt=""
+              aria-hidden="true"
+              className="pointer-events-none absolute -top-20 -right-20 w-72 h-72 object-cover opacity-55"
+            />
+
+            <div className="relative z-10">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#EEF0FA] border border-[#DFE1F5] text-[11px] font-display font-bold uppercase tracking-[0.12em] text-[#545C9E]">
+                <TrendingUp className="w-3.5 h-3.5 text-[#7584D6]" />
+                Estimated Net Monthly Impact
               </div>
 
-              <div className="mt-5 pb-5 border-b border-white/10">
-                <div className="text-xs text-slate-300">Estimated Monthly Logistics Leakage</div>
-                <div className="font-serif text-3xl font-bold text-red-300 mt-1">
-                  {formatINR(monthlyLogisticsLeakage)}
-                  <span className="text-xs font-sans font-normal text-slate-400"> / month</span>
-                </div>
-                <div className="text-xs text-slate-400 mt-1">
-                  Across ~{formatNumber(monthlyRtoOrders)} failed COD orders ({formatINR(perRtoLogisticsLoss)}/RTO)
-                </div>
+              <div className="mt-4 font-display text-[38px] sm:text-[44px] font-extrabold text-[#465478] tracking-[-0.04em] leading-none num">
+                {formatINR(metrics.netMonthlySavings)}
               </div>
+              <p className="text-[13px] text-[#7C86A2] mt-2">
+                Net monthly margin protected ({formatINR(metrics.annualRunRate)} annualized run-rate)
+              </p>
 
-              <div className="mt-5 pb-5 border-b border-white/10">
-                <div className="text-xs text-gold-light">Estimated Net Freight Savings (After Messaging)</div>
-                <div className="font-serif text-4xl font-bold text-gold mt-1">
-                  {formatINR(monthlyNetSavings)}
-                  <span className="text-xs font-sans font-normal text-slate-300"> / month</span>
+              <div className="mt-6 space-y-3">
+                <div className="rounded-[18px] bg-[#F9FAFB] border border-[#E3E6FA] p-4 flex items-center justify-between">
+                  <div>
+                    <div className="text-[11.5px] text-[#8891AA] font-medium">
+                      Current Monthly RTO Leakage
+                    </div>
+                    <div className="text-[12px] text-[#6E7896] mt-0.5">
+                      {formatNumber(metrics.baselineRtoOrders)} failed COD shipments × {formatINR(metrics.costPerRto)}
+                    </div>
+                  </div>
+                  <div className="font-display text-[17px] font-extrabold text-[#E05328] num">
+                    {formatINR(metrics.monthlyRtoLeakage)}
+                  </div>
                 </div>
-                <div className="text-xs text-emerald-300 mt-1">
-                  ≈ {formatINR(annualNetSavings)} projected annual freight savings
-                </div>
-              </div>
 
-              <div className="mt-5 grid grid-cols-2 gap-4">
-                <div className="bg-navy-dark p-3.5 border border-white/10">
-                  <div className="text-[10px] uppercase tracking-wider text-slate-400">
-                    Est. Orders Rescued
+                <div className="rounded-[18px] bg-[#F9FAFB] border border-[#E3E6FA] p-4 flex items-center justify-between">
+                  <div>
+                    <div className="text-[11.5px] text-[#8891AA] font-medium">
+                      Prevented RTO Shipments
+                    </div>
+                    <div className="text-[12px] text-[#6E7896] mt-0.5">
+                      COD RTO drops from {baselineRtoRate}% → {metrics.newRtoRate.toFixed(1)}%
+                    </div>
                   </div>
-                  <div className="font-serif text-xl font-bold text-white mt-1">
-                    {formatNumber(ordersRescuedEst)}/mo
+                  <div className="font-display text-[17px] font-extrabold text-[#17825B] num">
+                    {formatNumber(metrics.preventedRtos)} / mo
                   </div>
                 </div>
-                <div className="bg-navy-dark p-3.5 border border-white/10">
-                  <div className="text-[10px] uppercase tracking-wider text-slate-400">
-                    GMV Protected
+
+                <div className="rounded-[18px] bg-[#F9FAFB] border border-[#E3E6FA] p-4 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-[#7584D6]" />
+                    <span className="text-[12.5px] font-display font-semibold text-[#465478]">
+                      Verification Spend Deducted
+                    </span>
                   </div>
-                  <div className="font-serif text-xl font-bold text-white mt-1">
-                    {formatINR(revenueProtected)}
-                  </div>
+                  <span className="font-display text-[14px] font-bold text-[#545C9E] num">
+                    −{formatINR(metrics.outreachSpend)}
+                  </span>
                 </div>
               </div>
             </div>
 
-            <div className="mt-7">
-              <Link to="/app/analytics" className="block">
+            <div className="relative z-10 mt-7 pt-5 border-t border-[#EEF0FA] flex flex-col sm:flex-row gap-3">
+              <Link to="/app/financial" className="flex-1">
                 <Button variant="primary" size="lg" className="w-full">
-                  Inspect Live Financial Analytics <ArrowRight className="w-4 h-4" />
+                  Open Financial Ledger <ArrowRight className="w-4 h-4" />
                 </Button>
               </Link>
             </div>

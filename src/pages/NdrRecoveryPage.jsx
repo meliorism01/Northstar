@@ -1,287 +1,301 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Truck,
-  CalendarClock,
+  AlertTriangle,
   CheckCircle2,
+  CalendarClock,
   MapPin,
-  PhoneCall,
-  FileEdit,
-  ShieldAlert,
+  PhoneForwarded,
   Sparkles,
-  Info,
+  Wallet,
 } from 'lucide-react';
+import {
+  PageHeader,
+  KpiCard,
+  Button,
+  Tabs,
+  IconTile,
+  inputClass,
+  EmptyState,
+} from '../components/ui/Primitives';
 import { useOrdexaStore } from '../store/useOrdexaStore';
-import { Button, PageHeader } from '../components/ui/Primitives';
-import { formatDateTime, formatINR } from '../utils/formatters';
-
-function getNdrBadge(status) {
-  const map = {
-    'Pending Customer Response': 'bg-amber-50 text-amber-800 border-amber-200',
-    Rescheduled: 'bg-blue-50 text-blue-700 border-blue-200',
-    Recovered: 'bg-emerald-100 text-emerald-800 border-emerald-300',
-    'At Risk of RTO': 'bg-red-50 text-red-700 border-red-200',
-  };
-  return map[status] || 'bg-slate-100 text-slate-700 border-slate-200';
-}
+import { formatINR, formatDateTime } from '../utils/formatters';
 
 export function NdrRecoveryPage() {
   const ndrCases = useOrdexaStore((s) => s.ndrCases);
   const performNdrAction = useOrdexaStore((s) => s.performNdrAction);
   const simulateNdrRecovery = useOrdexaStore((s) => s.simulateNdrRecovery);
 
-  const [selectedId, setSelectedId] = useState(ndrCases[0]?.id || null);
-  const [replyInput, setReplyInput] = useState('Available tomorrow 5 PM – 7 PM, gate near Jain Temple');
-
-  const selectedCase = useMemo(
-    () => ndrCases.find((n) => n.id === selectedId) || ndrCases[0],
-    [ndrCases, selectedId]
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [selectedNdrId, setSelectedNdrId] = useState(ndrCases[0]?.id || null);
+  const [replyDraft, setReplyDraft] = useState(
+    'Available tomorrow 11 AM – 4 PM; landmark is Opposite SBI Main Branch.'
   );
 
   const stats = useMemo(() => {
-    const total = ndrCases.length;
-    const pending = ndrCases.filter((n) => n.recoveryStatus === 'Pending Customer Response').length;
-    const rescheduled = ndrCases.filter((n) => n.recoveryStatus === 'Rescheduled').length;
-    const recovered = ndrCases.filter((n) => n.recoveryStatus === 'Recovered').length;
-    const atRisk = ndrCases.filter((n) => n.recoveryStatus === 'At Risk of RTO').length;
-    return { total, pending, rescheduled, recovered, atRisk };
+    const open = ndrCases.filter((n) => n.recoveryStatus !== 'Recovered');
+    const critical = open.filter(
+      (n) => n.attemptCount >= 2 || n.recoveryStatus === 'At Risk of RTO'
+    );
+    const recovered = ndrCases.filter((n) => n.recoveryStatus === 'Recovered');
+    const exposureAtRisk = open.reduce((sum, n) => sum + (n.freightExposure || 160), 0);
+    return {
+      openCount: open.length,
+      criticalCount: critical.length,
+      recoveredCount: recovered.length,
+      exposureAtRisk,
+    };
   }, [ndrCases]);
 
-  const recoveryActions = [
-    { label: 'Request Delivery Rescheduling', icon: CalendarClock },
-    { label: 'Request Landmark', icon: MapPin },
-    { label: 'Confirm Customer Availability', icon: PhoneCall },
-    { label: 'Change Delivery Instructions', icon: FileEdit },
-    { label: 'Escalate for Manual Review', icon: ShieldAlert },
-  ];
+  const filteredCases = useMemo(() => {
+    if (statusFilter === 'ALL') return ndrCases;
+    return ndrCases.filter((n) => n.recoveryStatus === statusFilter);
+  }, [ndrCases, statusFilter]);
+
+  const activeCase = useMemo(
+    () =>
+      ndrCases.find((n) => n.id === selectedNdrId) ||
+      filteredCases[0] ||
+      ndrCases[0] ||
+      null,
+    [ndrCases, selectedNdrId, filteredCases]
+  );
+
+  const getNdrBadgeClass = (status) => {
+    if (status === 'Recovered') return 'bg-[#ECFEF6] text-[#17825B] border-[#C3F3DE]';
+    if (status === 'Rescheduled') return 'bg-[#EEF2FF] text-[#545C9E] border-[#DFE1F5]';
+    if (status === 'At Risk of RTO') return 'bg-[#FFF0F2] text-[#D13B56] border-[#FECDD6]';
+    return 'bg-[#FFF5ED] text-[#D96030] border-[#FDE0CA]';
+  };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <PageHeader
-        title="Logistics & NDR Recovery"
-        subtitle="Intercept failed courier delivery attempts with buyer re-confirmation, landmark updates, and hub re-attempt scheduling."
+        eyebrow="In-Transit · Exception Management"
+        title="NDR"
+        accentWord="Recovery"
+        subtitle="Intercept failed courier delivery attempts on Day 1—collect updated buyer landmarks or preferred delivery slots before Attempt #3 converts to RTO."
+        icon={Truck}
+        iconTone="coral"
       />
 
-      {/* Compact 5-Metric Summary Bar */}
-      <div className="bg-white border border-slate-200 rounded-[4px] shadow-card grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 divide-y sm:divide-y-0 sm:divide-x divide-slate-200 tabular-nums">
-        <div className="px-4 py-3">
-          <div className="text-[10px] uppercase font-semibold text-slate-500">Total NDR Cases</div>
-          <div className="text-xl font-bold text-navy-dark mt-0.5">{stats.total}</div>
-        </div>
-        <div className="px-4 py-3">
-          <div className="text-[10px] uppercase font-semibold text-slate-500">Pending Response</div>
-          <div className="text-xl font-bold text-amber-700 mt-0.5">{stats.pending}</div>
-        </div>
-        <div className="px-4 py-3">
-          <div className="text-[10px] uppercase font-semibold text-slate-500">Rescheduled</div>
-          <div className="text-xl font-bold text-blue-700 mt-0.5">{stats.rescheduled}</div>
-        </div>
-        <div className="px-4 py-3">
-          <div className="text-[10px] uppercase font-semibold text-slate-500">Recovered</div>
-          <div className="text-xl font-bold text-emerald-700 mt-0.5">{stats.recovered}</div>
-        </div>
-        <div className="px-4 py-3">
-          <div className="text-[10px] uppercase font-semibold text-slate-500">At Risk of RTO</div>
-          <div className="text-xl font-bold text-red-700 mt-0.5">{stats.atRisk}</div>
-        </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <KpiCard
+          title="Open NDR Exceptions"
+          value={String(stats.openCount)}
+          delta="Active"
+          icon={Truck}
+          accent="peri"
+        />
+        <KpiCard
+          title="Attempt #2+ Critical"
+          value={String(stats.criticalCount)}
+          delta="High Priority"
+          icon={AlertTriangle}
+          accent="coral"
+        />
+        <KpiCard
+          title="Recovered Shipments"
+          value={String(stats.recoveredCount)}
+          delta="Delivered"
+          icon={CheckCircle2}
+          accent="emerald"
+        />
+        <KpiCard
+          title="Reverse Freight at Risk"
+          value={formatINR(stats.exposureAtRisk)}
+          delta="Saveable"
+          icon={Wallet}
+          accent="pink"
+        />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        {/* Exception Queue Table */}
-        <div className="lg:col-span-7 bg-white border border-slate-200 rounded-[4px] shadow-card overflow-hidden">
-          <div className="px-4 py-3 bg-navy text-white flex items-center justify-between">
-            <h3 className="font-sans text-xs font-semibold uppercase tracking-wider flex items-center gap-2">
-              <Truck className="w-3.5 h-3.5 text-gold" /> Active NDR Exception Queue
-            </h3>
-            <span className="font-mono text-[10px] text-gold">Select shipment to manage</span>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[640px]">
-              <thead>
-                <tr className="bg-slate-50 border-b border-slate-200 text-[10px] uppercase tracking-wider font-semibold text-slate-600">
-                  <th className="py-2.5 px-3.5">Shipment / Buyer</th>
-                  <th className="py-2.5 px-3.5">Courier</th>
-                  <th className="py-2.5 px-3.5">NDR Reason</th>
-                  <th className="py-2.5 px-3.5">Attempt</th>
-                  <th className="py-2.5 px-3.5">Customer Response</th>
-                  <th className="py-2.5 px-3.5">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-xs">
-                {ndrCases.map((c) => {
-                  const active = selectedCase?.id === c.id;
-                  return (
-                    <tr
-                      key={c.id}
-                      onClick={() => setSelectedId(c.id)}
-                      className={`cursor-pointer transition-colors ${
-                        active ? 'bg-gold-subtle/70' : 'hover:bg-slate-50'
-                      }`}
-                    >
-                      <td className="py-2.5 px-3.5">
-                        <div className="font-mono font-bold text-navy-dark">{c.orderId}</div>
-                        <div className="text-[11px] text-slate-500">
-                          {c.customerName} ({c.city})
-                        </div>
-                      </td>
-                      <td className="py-2.5 px-3.5">
-                        <span className="inline-block px-2 py-0.5 text-[10px] font-semibold bg-slate-100 text-navy border border-slate-200 rounded-[3px]">
-                          {c.courier}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left: NDR Queue */}
+        <div className="lg:col-span-7 rescale-card p-5 space-y-4">
+          <Tabs
+            items={[
+              { id: 'ALL', label: 'All Cases', count: ndrCases.length },
+              { id: 'Pending Customer Response', label: 'Pending Reply' },
+              { id: 'Rescheduled', label: 'Rescheduled' },
+              { id: 'At Risk of RTO', label: 'At Risk of RTO' },
+              { id: 'Recovered', label: 'Recovered', count: stats.recoveredCount },
+            ]}
+            value={statusFilter}
+            onChange={setStatusFilter}
+          />
+
+          {filteredCases.length === 0 ? (
+            <EmptyState
+              icon={CheckCircle2}
+              title="No NDR cases in this bucket"
+              description="Switch tabs above to inspect other courier delivery exceptions."
+            />
+          ) : (
+            <div className="space-y-3">
+              {filteredCases.map((ndr) => {
+                const isSelected = activeCase?.id === ndr.id;
+                return (
+                  <div
+                    key={ndr.id}
+                    onClick={() => setSelectedNdrId(ndr.id)}
+                    className={`rounded-[20px] p-4 border transition-all cursor-pointer ${
+                      isSelected
+                        ? 'bg-[#F4F5FC] border-[#9AA6EA] shadow-rescale-card'
+                        : 'bg-white border-[#E3E6FA] hover:border-[#C5CAEC]'
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-display text-[14.5px] font-extrabold text-[#465478]">
+                          {ndr.orderId}
                         </span>
-                      </td>
-                      <td className="py-2.5 px-3.5 text-slate-700 max-w-[175px]">{c.ndrReason}</td>
-                      <td className="py-2.5 px-3.5 text-[11px] text-slate-500 whitespace-nowrap tabular-nums">
-                        <span className="font-mono font-bold text-navy-dark">#{c.attemptCount}</span>
-                        <div className="text-[10px]">{formatDateTime(c.attemptDate)}</div>
-                      </td>
-                      <td className="py-2.5 px-3.5 text-[11px] text-navy max-w-[140px]">
-                        {c.customerResponse}
-                      </td>
-                      <td className="py-2.5 px-3.5">
-                        <span
-                          className={`inline-block px-2 py-0.5 rounded-[3px] text-[10px] font-semibold border whitespace-nowrap ${getNdrBadge(
-                            c.recoveryStatus
-                          )}`}
-                        >
-                          {c.recoveryStatus}
+                        <span className="font-mono text-[11px] text-[#7584D6] bg-[#EEF0FA] px-2 py-0.5 rounded-full">
+                          {ndr.id} · Attempt #{ndr.attemptCount}
                         </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Shipment Timeline & Recovery Console */}
-        <div className="lg:col-span-5 space-y-4">
-          {selectedCase && (
-            <div className="bg-white border border-slate-200 rounded-[4px] border-t-4 border-t-gold shadow-card p-5 space-y-4 text-xs">
-              <div className="flex items-start justify-between gap-2 pb-3 border-b border-slate-200">
-                <div>
-                  <div className="font-mono text-[11px] font-bold text-gold-hover">
-                    {selectedCase.id} • {selectedCase.orderId}
-                  </div>
-                  <h3 className="font-sans text-base font-bold text-navy-dark mt-0.5">
-                    {selectedCase.customerName} ({selectedCase.city})
-                  </h3>
-                  <div className="text-slate-500 mt-0.5">
-                    {selectedCase.courier} • <strong className="text-navy">{selectedCase.ndrReason}</strong>
-                  </div>
-                </div>
-                <div className="text-right tabular-nums">
-                  <div className="text-[10px] uppercase text-slate-500">Exposure</div>
-                  <div className="text-base font-bold text-red-700">
-                    {formatINR(selectedCase.freightExposure)}
-                  </div>
-                </div>
-              </div>
-
-              {/* Delivery Attempt Timeline */}
-              <div>
-                <div className="text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-2">
-                  Delivery Attempt Timeline
-                </div>
-                <div className="grid grid-cols-4 gap-1.5 text-center text-[10px]">
-                  {[
-                    { step: 'Manifested', done: true },
-                    { step: `Attempt #${selectedCase.attemptCount} NDR`, done: true, warn: true },
-                    {
-                      step: 'Buyer Outreach',
-                      done: selectedCase.recoveryStatus !== 'At Risk of RTO',
-                    },
-                    {
-                      step: selectedCase.recoveryStatus === 'Recovered' ? 'Recovered' : 'Re-attempt',
-                      done: selectedCase.recoveryStatus === 'Recovered',
-                    },
-                  ].map((item) => (
-                    <div
-                      key={item.step}
-                      className={`p-2 rounded-[3px] border font-medium ${
-                        item.warn
-                          ? 'bg-amber-50 border-amber-200 text-amber-900'
-                          : item.done
-                          ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
-                          : 'bg-slate-50 border-slate-200 text-slate-500'
-                      }`}
-                    >
-                      {item.step}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="bg-slate-50 p-3 rounded-[4px] border border-slate-200">
-                <div className="text-[10px] uppercase text-slate-500 font-bold">Latest Action</div>
-                <div className="text-navy-dark font-medium mt-0.5">{selectedCase.lastAction}</div>
-              </div>
-
-              <div>
-                <div className="text-[10px] uppercase tracking-wider font-bold text-slate-500 mb-2">
-                  Trigger Recovery Action
-                </div>
-                <div className="grid grid-cols-1 gap-1.5">
-                  {recoveryActions.map((act) => {
-                    const Icon = act.icon;
-                    return (
-                      <button
-                        key={act.label}
-                        disabled={selectedCase.recoveryStatus === 'Recovered'}
-                        onClick={() => performNdrAction(selectedCase.id, act.label)}
-                        className="flex items-center justify-between px-3 py-2 rounded-[4px] border border-slate-200 bg-white hover:border-navy hover:bg-slate-50 text-navy-dark font-medium transition-colors disabled:opacity-50"
+                      </div>
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full text-[11px] font-display font-bold border ${getNdrBadgeClass(
+                          ndr.recoveryStatus
+                        )}`}
                       >
-                        <span className="flex items-center gap-2">
-                          <Icon className="w-3.5 h-3.5 text-gold-hover" />
-                          {act.label}
-                        </span>
-                        <span className="font-mono text-[10px] text-slate-400">Dispatch →</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+                        {ndr.recoveryStatus}
+                      </span>
+                    </div>
 
-              {/* Interactive Recovery Simulation */}
-              <div className="pt-3 border-t border-slate-200 space-y-2">
-                <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-emerald-800">
-                  <Sparkles className="w-3.5 h-3.5 text-emerald-600" /> Simulate Buyer Reply &amp; Recovery
-                </div>
-                <input
-                  value={replyInput}
-                  onChange={(e) => setReplyInput(e.target.value)}
-                  disabled={selectedCase.recoveryStatus === 'Recovered'}
-                  className="w-full h-8 px-2.5 border border-slate-200 rounded-[4px] text-navy text-xs"
-                />
-                <Button
-                  variant="success"
-                  size="sm"
-                  className="w-full"
-                  disabled={selectedCase.recoveryStatus === 'Recovered'}
-                  onClick={() => simulateNdrRecovery(selectedCase.id, replyInput)}
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  {selectedCase.recoveryStatus === 'Recovered'
-                    ? 'Recovered & Delivered'
-                    : 'Simulate Buyer Reply & Mark Recovered'}
-                </Button>
-              </div>
+                    <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[12.5px] text-[#6E7896]">
+                      <span>
+                        <strong className="text-[#465478]">{ndr.customerName}</strong> · {ndr.city}{' '}
+                        · {ndr.courier}
+                      </span>
+                      <span className="font-display font-bold text-[#465478] num">
+                        Cart {formatINR(ndr.orderValue)} · Freight Risk{' '}
+                        <span className="text-[#E05328]">{formatINR(ndr.freightExposure)}</span>
+                      </span>
+                    </div>
+
+                    <div className="mt-2 text-[12px] text-[#5C6888] bg-[#F9FAFB] rounded-[12px] px-3 py-2 border border-[#EEF0FA]">
+                      <span className="font-display font-bold text-[#465478]">Courier Remark: </span>
+                      {ndr.ndrReason}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
+        </div>
 
-          {/* Honest Future Capability Notice */}
-          <div className="bg-navy text-white p-4 rounded-[4px] border-l-4 border-gold text-xs flex items-start gap-2.5">
-            <Info className="w-4 h-4 text-gold flex-shrink-0 mt-0.5" />
-            <div>
-              <div className="font-semibold text-gold">
-                Future Capability: Courier Misconduct Verification
+        {/* Right: Active NDR Action & Recovery Simulator */}
+        <div className="lg:col-span-5 rescale-card p-6 space-y-5">
+          {activeCase ? (
+            <>
+              <div className="flex items-start justify-between gap-3 pb-4 border-b border-[#EEF0FA]">
+                <div className="flex items-center gap-3">
+                  <IconTile icon={Truck} tone="coral" size="md" />
+                  <div>
+                    <h3 className="font-display text-[17px] font-extrabold text-[#465478]">
+                      {activeCase.orderId} · {activeCase.courier}
+                    </h3>
+                    <p className="text-[12px] text-[#8891AA]">
+                      {activeCase.customerName} ({activeCase.city}) · Logged{' '}
+                      {formatDateTime(activeCase.attemptDate)}
+                    </p>
+                  </div>
+                </div>
               </div>
-              <p className="text-slate-300 mt-1 leading-relaxed text-[11px]">
-                GPS-based courier misconduct detection is presented strictly as a future roadmap
-                capability and will only activate when verified courier GPS telemetry and call-log
-                evidence are connected.
-              </p>
-            </div>
-          </div>
+
+              <div className="rounded-[18px] bg-[#F9FAFB] border border-[#E3E6FA] p-4 space-y-2 text-[12.5px]">
+                <div className="flex justify-between">
+                  <span className="text-[#8891AA]">Exception Reason</span>
+                  <span className="font-display font-bold text-[#465478]">
+                    {activeCase.ndrReason}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#8891AA]">Buyer Response</span>
+                  <span className="font-display font-semibold text-[#545C9E]">
+                    {activeCase.customerResponse}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-[#8891AA]">Last Ops Action</span>
+                  <span className="text-[#6E7896] text-right max-w-[220px]">
+                    {activeCase.lastAction}
+                  </span>
+                </div>
+              </div>
+
+              {/* Merchant NDR Outreach Actions */}
+              <div className="space-y-2.5">
+                <div className="text-[11px] font-display font-bold uppercase tracking-[0.12em] text-[#8891AA]">
+                  1. Trigger Automated Buyer NDR Outreach (₹0.85)
+                </div>
+                <div className="grid grid-cols-1 gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="justify-start"
+                    disabled={activeCase.recoveryStatus === 'Recovered'}
+                    onClick={() =>
+                      performNdrAction(activeCase.id, 'Request Delivery Rescheduling')
+                    }
+                  >
+                    <CalendarClock className="w-4 h-4 text-[#7584D6]" />
+                    Request Preferred Delivery Slot via WhatsApp
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="justify-start"
+                    disabled={activeCase.recoveryStatus === 'Recovered'}
+                    onClick={() =>
+                      performNdrAction(activeCase.id, 'Request Updated Landmark / Pin')
+                    }
+                  >
+                    <MapPin className="w-4 h-4 text-[#7584D6]" />
+                    Request Voice/Text Landmark Pin for Courier
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="justify-start"
+                    disabled={activeCase.recoveryStatus === 'Recovered'}
+                    onClick={() => performNdrAction(activeCase.id, 'Escalate for Manual Review')}
+                  >
+                    <PhoneForwarded className="w-4 h-4 text-[#FA6E43]" />
+                    Escalate Attempt #{activeCase.attemptCount} to Ops Tele-Desk
+                  </Button>
+                </div>
+              </div>
+
+              {/* Simulate Successful Recovery */}
+              <div className="rounded-[20px] bg-[#F4F5FC] border border-[#DFE1F5] p-4 space-y-3">
+                <div className="flex items-center gap-2 text-[11.5px] font-display font-bold text-[#545C9E]">
+                  <Sparkles className="w-4 h-4 text-[#7584D6]" />
+                  2. Simulate Buyer Reply &amp; Re-Attempt Delivery
+                </div>
+                <textarea
+                  rows={2}
+                  value={replyDraft}
+                  onChange={(e) => setReplyDraft(e.target.value)}
+                  disabled={activeCase.recoveryStatus === 'Recovered'}
+                  className={`${inputClass} bg-white`}
+                />
+                <Button
+                  variant="primary"
+                  size="md"
+                  className="w-full"
+                  disabled={activeCase.recoveryStatus === 'Recovered'}
+                  onClick={() => simulateNdrRecovery(activeCase.id, replyDraft)}
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  {activeCase.recoveryStatus === 'Recovered'
+                    ? 'Shipment Already Recovered & Delivered'
+                    : `Simulate Re-Attempt Success (Save ${formatINR(activeCase.freightExposure)})`}
+                </Button>
+              </div>
+            </>
+          ) : null}
         </div>
       </div>
     </div>

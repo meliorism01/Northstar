@@ -1,210 +1,237 @@
 import React, { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
-  Share2,
-  ShieldCheck,
-  Store,
-  Package,
-  MapPin,
-  CreditCard,
-  CheckCircle2,
-  MessageSquare,
-  GitMerge,
-  Scissors,
+  GitFork,
   Search,
-  Lock,
   ZoomIn,
   ZoomOut,
   RotateCcw,
+  ShieldCheck,
+  MapPin,
+  Link2,
+  Unlink,
+  CheckCircle2,
+  Lock,
 } from 'lucide-react';
+import {
+  PageHeader,
+  Button,
+  Tabs,
+  Avatar,
+  StatusBadge,
+  StoreBadge,
+  ConfirmDialog,
+  inputClass,
+  Hint,
+} from '../components/ui/Primitives';
 import { useOrdexaStore } from '../store/useOrdexaStore';
-import { Button, ConfirmDialog, PageHeader, StatusBadge } from '../components/ui/Primitives';
-import { formatDateTime, formatINR, formatPercent, maskPhone } from '../utils/formatters';
+import { formatINR, formatDateTime, maskPhone } from '../utils/formatters';
 
 export function CustomerGraphPage() {
+  const navigate = useNavigate();
   const customers = useOrdexaStore((s) => s.customers);
   const orders = useOrdexaStore((s) => s.orders);
+  const privacySettings = useOrdexaStore((s) => s.privacySettings);
   const selectedCustomerId = useOrdexaStore((s) => s.selectedCustomerId);
   const setSelectedCustomerId = useOrdexaStore((s) => s.setSelectedCustomerId);
+  const setSelectedOrderId = useOrdexaStore((s) => s.setSelectedOrderId);
   const updateIdentityRecord = useOrdexaStore((s) => s.updateIdentityRecord);
 
-  const [search, setSearch] = useState('');
-  const [activeNode, setActiveNode] = useState('customer');
+  const [dirSearch, setDirSearch] = useState('');
   const [inspectorTab, setInspectorTab] = useState('profile');
-  const [auditNote, setAuditNote] = useState('Verified phone and address evidence within merchant scope');
-  const [separateTarget, setSeparateTarget] = useState(null);
-
-  // Interactive Zoom & Pan state
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
   const [dragOrigin, setDragOrigin] = useState({ x: 0, y: 0 });
+  const [selectedNodeKey, setSelectedNodeKey] = useState('center');
+  const [confirmIdentity, setConfirmIdentity] = useState(null);
 
   const filteredCustomers = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = dirSearch.trim().toLowerCase();
     if (!q) return customers;
     return customers.filter(
       (c) =>
         c.name.toLowerCase().includes(q) ||
         c.city.toLowerCase().includes(q) ||
-        c.id.toLowerCase().includes(q)
+        c.id.toLowerCase().includes(q) ||
+        c.pincode.includes(q)
     );
-  }, [customers, search]);
+  }, [customers, dirSearch]);
 
-  const customer = useMemo(
-    () => customers.find((c) => c.id === selectedCustomerId) || customers[0],
-    [customers, selectedCustomerId]
+  const activeCustomer = useMemo(
+    () =>
+      customers.find((c) => c.id === selectedCustomerId) ||
+      filteredCustomers[0] ||
+      customers[0],
+    [customers, selectedCustomerId, filteredCustomers]
   );
 
   const customerOrders = useMemo(
-    () => orders.filter((o) => o.customerId === customer?.id),
-    [orders, customer]
+    () =>
+      activeCustomer ? orders.filter((o) => o.customerId === activeCustomer.id) : [],
+    [orders, activeCustomer]
   );
 
-  const deliverySuccessRate = useMemo(() => {
-    if (!customer) return 0;
-    const closed = customer.successfulDeliveries + customer.previousRtos;
-    if (closed === 0) return 0;
-    return (customer.successfulDeliveries / closed) * 100;
-  }, [customer]);
+  if (!activeCustomer) return null;
 
-  if (!customer) return null;
+  const deliveryRate =
+    activeCustomer.totalOrders > 0
+      ? Math.round((activeCustomer.successfulDeliveries / activeCustomer.totalOrders) * 100)
+      : 100;
 
-  const nodes = [
+  const displayPhone = privacySettings.maskPhoneByDefault
+    ? maskPhone(activeCustomer.phone)
+    : `+91 ${activeCustomer.phone}`;
+
+  const satelliteNodes = [
     {
-      id: 'stores',
-      type: 'STORE',
+      key: 'stores',
+      x: 115,
+      y: 95,
+      category: 'OWNED CHANNELS',
+      title: `${activeCustomer.stores.length} Store(s)`,
+      sub: activeCustomer.stores[0],
       edgeLabel: 'shops at',
-      label: 'Connected Stores',
-      sub: `${customer.stores.length} owned store(s)`,
-      x: 118,
-      y: 62,
-      color: '#262B3E',
+      color: '#7584D6',
+      bg: '#F4F5FC',
     },
     {
-      id: 'orders',
-      type: 'ORDER',
+      key: 'orders',
+      x: 485,
+      y: 95,
+      category: 'ORDER HISTORY',
+      title: `${activeCustomer.totalOrders} Orders`,
+      sub: `${customerOrders.length} active in workspace`,
       edgeLabel: 'placed',
-      label: 'Previous Orders',
-      sub: `${customerOrders.length} order(s)`,
-      x: 502,
-      y: 62,
-      color: '#262B3E',
+      color: '#52CEEE',
+      bg: '#EEFBFF',
     },
     {
-      id: 'addresses',
-      type: 'ADDRESS',
-      edgeLabel: 'delivers to',
-      label: 'Delivery Addresses',
-      sub: `${customer.addresses.length} saved`,
-      x: 92,
-      y: 185,
-      color: '#B59D73',
+      key: 'addresses',
+      x: 95,
+      y: 225,
+      category: 'ADDRESSES',
+      title: `${activeCustomer.addresses.length} Saved`,
+      sub: `${activeCustomer.city} · ${activeCustomer.pincode}`,
+      edgeLabel: 'ships to',
+      color: '#FA845D',
+      bg: '#FFF5F0',
     },
     {
-      id: 'payments',
-      type: 'PAYMENT',
+      key: 'payment',
+      x: 505,
+      y: 225,
+      category: 'PAYMENT MIX',
+      title: `${activeCustomer.codOrders} COD / ${activeCustomer.prepaidOrders} Pre`,
+      sub: activeCustomer.tier,
       edgeLabel: 'pays via',
-      label: 'Payment Behaviour',
-      sub: `${customer.codOrders} COD / ${customer.prepaidOrders} Pre`,
-      x: 528,
-      y: 185,
-      color: '#B59D73',
+      color: '#EC7CC0',
+      bg: '#FFF3FA',
     },
     {
-      id: 'outcomes',
-      type: 'OUTCOME',
+      key: 'outcomes',
+      x: 125,
+      y: 350,
+      category: 'OUTCOMES',
+      title: `${activeCustomer.successfulDeliveries} Del · ${activeCustomer.previousRtos} RTO`,
+      sub: `${deliveryRate}% Reliability`,
       edgeLabel: 'resulted in',
-      label: 'Delivery Outcomes',
-      sub: `${customer.successfulDeliveries} Del • ${customer.previousRtos} RTO`,
-      x: 132,
-      y: 308,
-      color: customer.previousRtos > 0 ? '#DC3545' : '#198754',
+      color: '#2EB37E',
+      bg: '#EEFCF6',
     },
     {
-      id: 'interventions',
-      type: 'INTERVENTION',
-      edgeLabel: 'responded to',
-      label: 'Prior Interventions',
-      sub: `${customerOrders.filter((o) => (o.messages || []).length > 0 || o.rescued).length} logged`,
-      x: 488,
-      y: 308,
-      color: '#262B3E',
+      key: 'identity',
+      x: 475,
+      y: 350,
+      category: 'IDENTITY MATCH',
+      title: `${activeCustomer.identityResolution.confidence}% Match`,
+      sub: `${activeCustomer.identityResolution.matchedRecords.length} linked record(s)`,
+      edgeLabel: 'resolved via',
+      color: '#8C8CF5',
+      bg: '#F6F5FF',
     },
   ];
 
-  const handlePointerDown = (e) => {
-    if (e.target.closest('[data-node="true"]')) return;
-    setDragging(true);
-    setDragOrigin({ x: e.clientX - pan.x, y: e.clientY - pan.y });
-  };
-
-  const handlePointerMove = (e) => {
-    if (!dragging) return;
-    setPan({ x: e.clientX - dragOrigin.x, y: e.clientY - dragOrigin.y });
-  };
-
-  const handlePointerUp = () => setDragging(false);
-
-  const resetViewport = () => {
-    setZoom(1);
-    setPan({ x: 0, y: 0 });
+  const handleIdentityAction = (record, action) => {
+    if (privacySettings.requireEvidenceForMerge) {
+      setConfirmIdentity({ record, action });
+    } else {
+      updateIdentityRecord(
+        activeCustomer.id,
+        record.id,
+        action,
+        `Updated directly from Customer Intelligence Graph`
+      );
+    }
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       <PageHeader
-        title="Customer Intelligence Graph"
-        subtitle="Merchant-scoped identity resolution linking orders, addresses, payments, and delivery outcomes across your own stores."
+        eyebrow="Identity · Merchant-Scoped Graph"
+        title="Customer"
+        accentWord="Intelligence"
+        subtitle="Privacy-first buyer identity resolution across your owned storefronts—linking addresses, landmarks, and COD outcomes without cross-merchant blacklists."
+        icon={GitFork}
+        iconTone="peri"
         badge={
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[10px] font-mono font-semibold bg-navy text-gold rounded-[3px]">
-            <Lock className="w-3 h-3" /> Merchant-Scoped Only
+          <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-[#ECFEF6] border border-[#C3F3DE] text-[11px] font-display font-bold text-[#17825B]">
+            <Lock className="w-3 h-3" /> Merchant-Scoped Isolation Active
           </span>
         }
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        {/* Left: Customer Directory */}
-        <div className="lg:col-span-3 bg-white border border-slate-200 rounded-[4px] shadow-card flex flex-col max-h-[700px]">
-          <div className="p-3 border-b border-slate-200">
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search customer or city..."
-                className="w-full h-8 pl-8 pr-3 text-xs border border-slate-200 rounded-[4px] text-navy focus:outline-none focus:border-navy"
-              />
-            </div>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-stretch">
+        {/* LEFT COLUMN (3 cols): Buyer Directory */}
+        <div className="lg:col-span-3 rescale-card p-4 flex flex-col max-h-[680px]">
+          <div className="relative mb-3">
+            <Search className="w-4 h-4 text-[#7584D6] absolute left-3.5 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={dirSearch}
+              onChange={(e) => setDirSearch(e.target.value)}
+              placeholder="Search buyer, city, PIN…"
+              className={`${inputClass} pl-9`}
+            />
           </div>
-          <div className="divide-y divide-slate-100 overflow-y-auto flex-1">
+
+          <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
             {filteredCustomers.map((c) => {
-              const active = c.id === customer.id;
+              const isSelected = c.id === activeCustomer.id;
               return (
                 <button
                   key={c.id}
+                  type="button"
                   onClick={() => {
                     setSelectedCustomerId(c.id);
-                    setActiveNode('customer');
+                    setSelectedNodeKey('center');
                   }}
-                  className={`w-full text-left px-3.5 py-2.5 transition-colors border-l-2 ${
-                    active
-                      ? 'bg-gold-subtle/70 border-l-gold'
-                      : 'border-l-transparent hover:bg-slate-50'
+                  className={`w-full text-left p-3 rounded-[16px] border transition-all ${
+                    isSelected
+                      ? 'bg-[#EEF0FA] border-[#C9D0F3] shadow-rescale-card'
+                      : 'bg-white border-transparent hover:bg-[#F9FAFB] hover:border-[#EEF0FA]'
                   }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-semibold text-navy-dark">{c.name}</span>
-                    <span className="font-mono text-[10px] text-slate-400">{c.id}</span>
-                  </div>
-                  <div className="text-[11px] text-slate-500 mt-0.5">
-                    {c.city} ({c.tier}) • {c.stores.length} store(s)
-                  </div>
-                  <div className="flex items-center gap-2 mt-1 text-[10px] font-mono tabular-nums">
-                    <span className="text-emerald-700 font-semibold">{c.successfulDeliveries} Del</span>
-                    <span className={c.previousRtos > 0 ? 'text-red-600 font-semibold' : 'text-slate-400'}>
-                      {c.previousRtos} RTO
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-display text-[13.5px] font-bold text-[#465478] truncate">
+                      {c.name}
                     </span>
-                    <span className="text-navy ml-auto">{c.identityResolution.confidence}% Match</span>
+                    <span className="font-mono text-[10px] text-[#8891AA]">{c.id}</span>
+                  </div>
+                  <div className="text-[11.5px] text-[#7C86A2] mt-0.5">
+                    {c.city} ({c.tier}) · {c.stores.length} store(s)
+                  </div>
+                  <div className="mt-2 flex items-center justify-between text-[11px] font-display font-bold">
+                    <span>
+                      <span className="text-[#17825B]">{c.successfulDeliveries} Del</span>
+                      <span className="text-[#C5CAEC] mx-1">·</span>
+                      <span className={c.previousRtos > 0 ? 'text-[#E05328]' : 'text-[#8891AA]'}>
+                        {c.previousRtos} RTO
+                      </span>
+                    </span>
+                    <span className="text-[#7584D6] num">
+                      {c.identityResolution.confidence}% Match
+                    </span>
                   </div>
                 </button>
               );
@@ -212,525 +239,497 @@ export function CustomerGraphPage() {
           </div>
         </div>
 
-        {/* Center: Interactive Zoom/Pan Graph Canvas */}
-        <div className="lg:col-span-5 bg-white border border-slate-200 rounded-[4px] shadow-card flex flex-col">
-          <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between gap-2">
+        {/* CENTER COLUMN (5 cols): Interactive Dotted Relationship Topology */}
+        <div className="lg:col-span-5 rescale-card p-5 flex flex-col justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
             <div>
-              <h3 className="font-sans text-sm font-bold text-navy-dark flex items-center gap-1.5">
-                <Share2 className="w-4 h-4 text-gold-hover" /> Relationship Topology
+              <h3 className="font-display text-[16px] font-bold text-[#465478]">
+                Relationship Topology
               </h3>
-              <p className="text-[11px] text-slate-500">Drag canvas to pan • Click nodes to inspect</p>
+              <p className="text-[11.5px] text-[#8891AA]">
+                Drag canvas to pan · Click any node to inspect signals
+              </p>
             </div>
-            <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-[4px] border border-slate-200">
+
+            <div className="inline-flex items-center gap-1 bg-[#F9FAFB] border border-[#DFE1F5] rounded-full p-1">
               <button
-                onClick={() => setZoom((z) => Math.max(0.7, Number((z - 0.15).toFixed(2))))}
-                className="p-1 text-navy hover:bg-white rounded-[3px]"
-                title="Zoom Out"
-                aria-label="Zoom Out"
+                type="button"
+                onClick={() => setZoom((z) => Math.max(0.75, Number((z - 0.12).toFixed(2))))}
+                className="w-7 h-7 rounded-full hover:bg-white flex items-center justify-center text-[#5C6888]"
+                aria-label="Zoom out"
               >
                 <ZoomOut className="w-3.5 h-3.5" />
               </button>
-              <span className="px-1.5 font-mono text-[10px] text-navy tabular-nums">
+              <span className="px-2 text-[11px] font-mono font-bold text-[#465478] num">
                 {Math.round(zoom * 100)}%
               </span>
               <button
-                onClick={() => setZoom((z) => Math.min(1.6, Number((z + 0.15).toFixed(2))))}
-                className="p-1 text-navy hover:bg-white rounded-[3px]"
-                title="Zoom In"
-                aria-label="Zoom In"
+                type="button"
+                onClick={() => setZoom((z) => Math.min(1.35, Number((z + 0.12).toFixed(2))))}
+                className="w-7 h-7 rounded-full hover:bg-white flex items-center justify-center text-[#5C6888]"
+                aria-label="Zoom in"
               >
                 <ZoomIn className="w-3.5 h-3.5" />
               </button>
               <button
-                onClick={resetViewport}
-                className="p-1 text-navy hover:bg-white rounded-[3px]"
-                title="Reset View"
-                aria-label="Reset View"
+                type="button"
+                onClick={() => {
+                  setZoom(1);
+                  setPan({ x: 0, y: 0 });
+                }}
+                className="w-7 h-7 rounded-full hover:bg-white flex items-center justify-center text-[#7584D6]"
+                aria-label="Reset view"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
 
+          {/* Interactive SVG Graph Canvas */}
           <div
-            onPointerDown={handlePointerDown}
-            onPointerMove={handlePointerMove}
-            onPointerUp={handlePointerUp}
-            onPointerLeave={handlePointerUp}
-            className={`relative bg-surface-canvas border-b border-slate-200 overflow-hidden select-none ${
-              dragging ? 'cursor-grabbing' : 'cursor-grab'
-            }`}
-            style={{
-              backgroundImage: 'radial-gradient(#D1D5DB 1px, transparent 1px)',
-              backgroundSize: '18px 18px',
+            onMouseDown={(e) => {
+              setDragging(true);
+              setDragOrigin({ x: e.clientX - pan.x, y: e.clientY - pan.y });
             }}
+            onMouseMove={(e) => {
+              if (!dragging) return;
+              setPan({ x: e.clientX - dragOrigin.x, y: e.clientY - dragOrigin.y });
+            }}
+            onMouseUp={() => setDragging(false)}
+            onMouseLeave={() => setDragging(false)}
+            className="relative rounded-[20px] border border-[#E3E6FA] bg-[#F9FAFB] rescale-dotted overflow-hidden cursor-grab active:cursor-grabbing select-none h-[430px]"
           >
-            <svg viewBox="0 0 620 370" className="w-full h-[355px]">
-              <g transform={`translate(${pan.x + 310}, ${pan.y + 185}) scale(${zoom}) translate(-310, -185)`}>
-                {/* Curved Cubic Bezier Edges + Labels */}
-                {nodes.map((n) => {
-                  const selected = activeNode === n.id;
-                  const midX = (310 + n.x) / 2;
-                  const midY = (185 + n.y) / 2;
-                  const ctrlX = midX;
-                  const ctrlY = n.y < 185 ? midY - 18 : midY + 18;
-                  const pathD = `M 310 185 Q ${ctrlX} ${ctrlY} ${n.x} ${n.y}`;
+            <svg viewBox="0 0 600 440" className="w-full h-full">
+              <g
+                transform={`translate(${pan.x}, ${pan.y}) translate(300, 220) scale(${zoom}) translate(-300, -220)`}
+              >
+                {/* Connecting Edges */}
+                {satelliteNodes.map((node) => {
+                  const midX = (300 + node.x) / 2;
+                  const midY = (220 + node.y) / 2;
                   return (
-                    <g key={`edge-${n.id}`}>
-                      <path
-                        d={pathD}
-                        fill="none"
-                        stroke={selected ? '#B59D73' : '#CBD5E1'}
-                        strokeWidth={selected ? 2.2 : 1.3}
-                        strokeDasharray={selected ? '0' : '4 3'}
+                    <g key={`edge-${node.key}`}>
+                      <line
+                        x1={300}
+                        y1={220}
+                        x2={node.x}
+                        y2={node.y}
+                        stroke="#CED4F2"
+                        strokeWidth="1.8"
+                        strokeDasharray="4 4"
                       />
                       <rect
-                        x={midX - 28}
-                        y={ctrlY - 8}
-                        width={56}
-                        height={15}
-                        rx={3}
+                        x={midX - 34}
+                        y={midY - 10}
+                        width={68}
+                        height={20}
+                        rx={10}
                         fill="#FFFFFF"
-                        stroke="#E2E8F0"
+                        stroke="#E3E6FA"
                       />
                       <text
                         x={midX}
-                        y={ctrlY + 3}
+                        y={midY + 3.5}
                         textAnchor="middle"
-                        fill="#64748B"
-                        fontSize="8.5"
-                        fontFamily="Inter, sans-serif"
+                        fontSize="9"
+                        fill="#7C86A2"
+                        fontFamily="Manrope, sans-serif"
+                        fontWeight="600"
                       >
-                        {n.edgeLabel}
+                        {node.edgeLabel}
                       </text>
                     </g>
                   );
                 })}
 
-                {/* Typed Connected Nodes */}
-                {nodes.map((n) => {
-                  const selected = activeNode === n.id;
+                {/* Satellite Nodes */}
+                {satelliteNodes.map((node) => {
+                  const isActive = selectedNodeKey === node.key;
                   return (
                     <g
-                      key={n.id}
-                      data-node="true"
-                      onClick={() => {
-                        setActiveNode(n.id);
-                        if (n.id === 'orders' || n.id === 'outcomes') setInspectorTab('profile');
-                        if (n.id === 'addresses' || n.id === 'interventions') setInspectorTab('history');
+                      key={node.key}
+                      transform={`translate(${node.x - 76}, ${node.y - 32})`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedNodeKey(node.key);
                       }}
                       className="cursor-pointer"
                     >
                       <rect
-                        x={n.x - 78}
-                        y={n.y - 28}
-                        width={156}
-                        height={56}
-                        rx={4}
-                        fill={selected ? '#1C202E' : '#FFFFFF'}
-                        stroke={selected ? '#C9B38C' : '#CBD5E1'}
-                        strokeWidth={selected ? 2 : 1.1}
+                        width={152}
+                        height={64}
+                        rx={16}
+                        fill="#FFFFFF"
+                        stroke={isActive ? node.color : '#DFE1F5'}
+                        strokeWidth={isActive ? '2.2' : '1.2'}
                       />
-                      <rect x={n.x - 78} y={n.y - 28} width={156} height={4} rx={2} fill={n.color} />
+                      <rect
+                        x={14}
+                        y={0}
+                        width={124}
+                        height={3.5}
+                        rx={2}
+                        fill={node.color}
+                      />
                       <text
-                        x={n.x}
-                        y={n.y - 12}
+                        x={76}
+                        y={20}
                         textAnchor="middle"
-                        fill={selected ? '#C9B38C' : '#64748B'}
-                        fontSize="8"
-                        fontWeight="700"
-                        letterSpacing="0.8"
+                        fontSize="8.5"
+                        fill="#8891AA"
+                        fontFamily="Manrope, sans-serif"
+                        fontWeight="800"
+                        letterSpacing="0.08em"
                       >
-                        {n.type}
+                        {node.category}
                       </text>
                       <text
-                        x={n.x}
-                        y={n.y + 3}
+                        x={76}
+                        y={37}
                         textAnchor="middle"
-                        fill={selected ? '#FFFFFF' : '#1C202E'}
-                        fontSize="11"
-                        fontWeight="700"
-                        fontFamily="Inter, sans-serif"
+                        fontSize="11.5"
+                        fill="#465478"
+                        fontFamily="Manrope, sans-serif"
+                        fontWeight="800"
                       >
-                        {n.label}
+                        {node.title}
                       </text>
                       <text
-                        x={n.x}
-                        y={n.y + 18}
+                        x={76}
+                        y={52}
                         textAnchor="middle"
-                        fill={selected ? '#E3D5BC' : '#64748B'}
                         fontSize="9.5"
+                        fill="#7C86A2"
                         fontFamily="Inter, sans-serif"
                       >
-                        {n.sub}
+                        {node.sub.length > 24 ? `${node.sub.slice(0, 22)}…` : node.sub}
                       </text>
                     </g>
                   );
                 })}
 
-                {/* Central Customer Identity Node */}
-                <g data-node="true" onClick={() => setActiveNode('customer')} className="cursor-pointer">
+                {/* Central Buyer Identity Pill Card */}
+                <g
+                  transform="translate(212, 174)"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setSelectedNodeKey('center');
+                  }}
+                  className="cursor-pointer"
+                >
                   <rect
-                    x={224}
-                    y={143}
-                    width={172}
-                    height={84}
-                    rx={6}
-                    fill="#1C202E"
-                    stroke="#C9B38C"
-                    strokeWidth="2.5"
+                    width={176}
+                    height={92}
+                    rx={22}
+                    fill="#545C9E"
+                    stroke="#8C95E8"
+                    strokeWidth="2"
                   />
                   <text
-                    x={310}
-                    y={166}
+                    x={88}
+                    y={24}
                     textAnchor="middle"
-                    fill="#C9B38C"
                     fontSize="8.5"
-                    fontWeight="700"
-                    letterSpacing="1.4"
+                    fill="#80E5FF"
+                    fontFamily="Manrope, sans-serif"
+                    fontWeight="800"
+                    letterSpacing="0.12em"
                   >
                     CUSTOMER IDENTITY
                   </text>
                   <text
-                    x={310}
-                    y={187}
+                    x={88}
+                    y={46}
                     textAnchor="middle"
+                    fontSize="14"
                     fill="#FFFFFF"
-                    fontSize="13"
-                    fontWeight="700"
-                    fontFamily="Inter, sans-serif"
+                    fontFamily="Manrope, sans-serif"
+                    fontWeight="800"
                   >
-                    {customer.name}
+                    {activeCustomer.name}
                   </text>
                   <text
-                    x={310}
-                    y={205}
+                    x={88}
+                    y={64}
                     textAnchor="middle"
-                    fill="#CBD5E1"
+                    fontSize="10.5"
+                    fill="#E3E6FA"
+                    fontFamily="JetBrains Mono, monospace"
+                  >
+                    {displayPhone}
+                  </text>
+                  <text
+                    x={88}
+                    y={80}
+                    textAnchor="middle"
                     fontSize="10"
-                    fontFamily="monospace"
+                    fill="#C9D0F3"
+                    fontFamily="Manrope, sans-serif"
+                    fontWeight="600"
                   >
-                    {maskPhone(customer.phone)}
-                  </text>
-                  <text
-                    x={310}
-                    y={219}
-                    textAnchor="middle"
-                    fill="#C9B38C"
-                    fontSize="9"
-                    fontFamily="Inter, sans-serif"
-                  >
-                    {customer.city} • {customer.pincode}
+                    {activeCustomer.city} · {activeCustomer.pincode}
                   </text>
                 </g>
               </g>
             </svg>
           </div>
 
-          {/* Focused Node Evidence Strip */}
-          <div className="p-4 text-xs flex-1 bg-white">
-            {activeNode === 'customer' && (
-              <div>
-                <div className="font-semibold text-navy-dark mb-1">Central Identity Summary</div>
-                <p className="text-slate-600 leading-relaxed">
-                  {customer.name} ({customer.id}) in {customer.city}, {customer.state} ({customer.pincode},{' '}
-                  {customer.tier}). Responsiveness: <strong className="text-navy">{customer.responsiveness}</strong>.
-                </p>
-              </div>
-            )}
-            {activeNode === 'stores' && (
-              <div>
-                <div className="font-semibold text-navy-dark mb-2 flex items-center gap-1.5">
-                  <Store className="w-3.5 h-3.5 text-gold-hover" /> Connected Merchant Stores
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {customer.stores.map((st) => (
-                    <span key={st} className="px-2.5 py-1 bg-slate-50 border border-slate-200 rounded-[3px] font-medium text-navy">
-                      {st}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-            {activeNode === 'orders' && (
-              <div>
-                <div className="font-semibold text-navy-dark mb-2 flex items-center gap-1.5">
-                  <Package className="w-3.5 h-3.5 text-gold-hover" /> Linked Orders ({customerOrders.length})
-                </div>
-                <div className="space-y-1.5 max-h-32 overflow-y-auto">
-                  {customerOrders.map((o) => (
-                    <div key={o.id} className="flex items-center justify-between bg-slate-50 px-2.5 py-1.5 rounded-[3px] border border-slate-200">
-                      <span className="font-mono font-bold text-navy">{o.id}</span>
-                      <span className="tabular-nums">{formatINR(o.orderValue)} ({o.paymentMode})</span>
-                      <StatusBadge status={o.status} />
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            {activeNode === 'addresses' && (
-              <div>
-                <div className="font-semibold text-navy-dark mb-2 flex items-center gap-1.5">
-                  <MapPin className="w-3.5 h-3.5 text-gold-hover" /> Delivery Addresses
-                </div>
-                <div className="space-y-1.5">
-                  {customer.addresses.map((a) => (
-                    <div key={a.id} className="bg-slate-50 p-2 rounded-[3px] border border-slate-200">
-                      <div className="font-semibold text-navy-dark">{a.line1}</div>
-                      <div className="text-slate-500">
-                        Landmark: {a.landmark || 'Missing'} • {a.city} ({a.pincode})
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-            {activeNode === 'payments' && (
-              <div>
-                <div className="font-semibold text-navy-dark mb-1 flex items-center gap-1.5">
-                  <CreditCard className="w-3.5 h-3.5 text-gold-hover" /> Payment Behaviour
-                </div>
-                <div className="text-slate-600 tabular-nums">
-                  COD Orders: <strong className="text-navy">{customer.codOrders}</strong> • Prepaid Orders:{' '}
-                  <strong className="text-navy">{customer.prepaidOrders}</strong>
-                </div>
-              </div>
-            )}
-            {activeNode === 'outcomes' && (
-              <div>
-                <div className="font-semibold text-navy-dark mb-1 flex items-center gap-1.5">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-gold-hover" /> Delivery Outcomes
-                </div>
-                <div className="text-slate-600 tabular-nums">
-                  Successful Deliveries: <strong className="text-emerald-700">{customer.successfulDeliveries}</strong> • Previous RTOs:{' '}
-                  <strong className="text-red-600">{customer.previousRtos}</strong> • Prior NDRs:{' '}
-                  <strong className="text-amber-700">{customer.priorNdrCount}</strong>
-                </div>
-              </div>
-            )}
-            {activeNode === 'interventions' && (
-              <div>
-                <div className="font-semibold text-navy-dark mb-1 flex items-center gap-1.5">
-                  <MessageSquare className="w-3.5 h-3.5 text-gold-hover" /> Previous Interventions
-                </div>
-                <div className="text-slate-600">
-                  {customer.addressHistory?.length > 0
-                    ? customer.addressHistory.map((h, i) => <div key={i}>• {h.change}</div>)
-                    : 'No manual interventions required previously.'}
-                </div>
-              </div>
-            )}
+          {/* Node Context Summary Footer */}
+          <div className="mt-4 rounded-[16px] bg-[#F4F5FC] border border-[#E3E6FA] px-4 py-3 text-[12.5px] text-[#465478]">
+            <span className="font-display font-bold text-[#545C9E]">
+              Active Node Summary:{' '}
+            </span>
+            {activeCustomer.name} ({activeCustomer.id}) in {activeCustomer.city},{' '}
+            {activeCustomer.state} ({activeCustomer.pincode}, {activeCustomer.tier}).
+            Responsiveness: <strong>{activeCustomer.responsiveness}</strong>.
           </div>
         </div>
 
-        {/* Right: Tabbed Detail & Identity Resolution Inspector */}
-        <div className="lg:col-span-4 bg-white border border-slate-200 rounded-[4px] shadow-card flex flex-col">
-          {/* Inspector Tabs */}
-          <div className="flex border-b border-slate-200 bg-slate-50/70 px-2 pt-2 gap-1">
-            {[
-              { id: 'profile', label: 'Profile & Orders' },
-              { id: 'resolution', label: 'Identity Resolution' },
-              { id: 'history', label: 'Activity & Addresses' },
-            ].map((t) => (
-              <button
-                key={t.id}
-                onClick={() => setInspectorTab(t.id)}
-                className={`px-3 py-2 text-xs font-medium rounded-t-[4px] border-b-2 transition-colors ${
-                  inspectorTab === t.id
-                    ? 'border-navy text-navy-dark font-semibold bg-white'
-                    : 'border-transparent text-slate-500 hover:text-navy-dark'
-                }`}
-              >
-                {t.label}
-              </button>
-            ))}
-          </div>
+        {/* RIGHT COLUMN (4 cols): 3-Tab Profile / Identity / Addresses Inspector */}
+        <div className="lg:col-span-4 rescale-card p-5 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center gap-3 pb-4 border-b border-[#F1F2F9]">
+              <Avatar name={activeCustomer.name} size="md" />
+              <div className="min-w-0 flex-1">
+                <div className="font-display text-[16px] font-extrabold text-[#465478] truncate">
+                  {activeCustomer.name}
+                </div>
+                <div className="text-[12px] text-[#8891AA] truncate">
+                  {displayPhone} · {activeCustomer.email}
+                </div>
+              </div>
+            </div>
 
-          <div className="p-4 flex-1 overflow-y-auto text-xs space-y-4">
+            <div className="my-4">
+              <Tabs
+                items={[
+                  { id: 'profile', label: 'Profile & Orders' },
+                  { id: 'identity', label: 'Identity Resolution' },
+                  { id: 'addresses', label: 'Addresses' },
+                ]}
+                value={inspectorTab}
+                onChange={setInspectorTab}
+              />
+            </div>
+
             {inspectorTab === 'profile' && (
-              <>
-                <div className="grid grid-cols-2 gap-2.5 text-center tabular-nums">
-                  <div className="bg-slate-50 p-3 rounded-[4px] border border-slate-200">
-                    <div className="text-[10px] uppercase text-slate-500">Total Orders</div>
-                    <div className="text-lg font-bold text-navy-dark mt-0.5">{customer.totalOrders}</div>
-                  </div>
-                  <div className="bg-slate-50 p-3 rounded-[4px] border border-slate-200">
-                    <div className="text-[10px] uppercase text-slate-500">Delivery Rate</div>
-                    <div className="text-lg font-bold text-emerald-700 mt-0.5">
-                      {formatPercent(deliverySuccessRate, 0)}
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-[16px] bg-[#F9FAFB] border border-[#E3E6FA] p-3.5 text-center">
+                    <div className="text-[10.5px] font-display font-bold uppercase tracking-wider text-[#8891AA]">
+                      Total Orders
+                    </div>
+                    <div className="font-display text-[22px] font-extrabold text-[#465478] mt-1 num">
+                      {activeCustomer.totalOrders}
                     </div>
                   </div>
-                  <div className="bg-slate-50 p-3 rounded-[4px] border border-slate-200">
-                    <div className="text-[10px] uppercase text-slate-500">Prior RTOs</div>
-                    <div className="text-lg font-bold text-red-600 mt-0.5">{customer.previousRtos}</div>
+                  <div className="rounded-[16px] bg-[#F9FAFB] border border-[#E3E6FA] p-3.5 text-center">
+                    <div className="text-[10.5px] font-display font-bold uppercase tracking-wider text-[#8891AA]">
+                      Delivery Rate
+                    </div>
+                    <div className="font-display text-[22px] font-extrabold text-[#17825B] mt-1 num">
+                      {deliveryRate}%
+                    </div>
                   </div>
-                  <div className="bg-slate-50 p-3 rounded-[4px] border border-slate-200">
-                    <div className="text-[10px] uppercase text-slate-500">COD vs Prepaid</div>
-                    <div className="text-sm font-bold text-navy-dark mt-1">
-                      {customer.codOrders} / {customer.prepaidOrders}
+                  <div className="rounded-[16px] bg-[#F9FAFB] border border-[#E3E6FA] p-3.5 text-center">
+                    <div className="text-[10.5px] font-display font-bold uppercase tracking-wider text-[#8891AA]">
+                      Prior RTOs
+                    </div>
+                    <div className="font-display text-[22px] font-extrabold text-[#E05328] mt-1 num">
+                      {activeCustomer.previousRtos}
+                    </div>
+                  </div>
+                  <div className="rounded-[16px] bg-[#F9FAFB] border border-[#E3E6FA] p-3.5 text-center">
+                    <div className="text-[10.5px] font-display font-bold uppercase tracking-wider text-[#8891AA]">
+                      COD vs Prepaid
+                    </div>
+                    <div className="font-display text-[22px] font-extrabold text-[#545C9E] mt-1 num">
+                      {activeCustomer.codOrders} / {activeCustomer.prepaidOrders}
                     </div>
                   </div>
                 </div>
 
                 <div>
-                  <div className="font-semibold text-navy-dark mb-2">Merchant-Scoped Order History</div>
-                  <div className="space-y-1.5">
+                  <div className="text-[11.5px] font-display font-bold text-[#465478] mb-2">
+                    Merchant-Scoped Order History
+                  </div>
+                  <div className="space-y-2">
                     {customerOrders.map((o) => (
-                      <div key={o.id} className="flex items-center justify-between p-2.5 border border-slate-200 rounded-[4px]">
+                      <button
+                        key={o.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedOrderId(o.id);
+                          navigate('/app/orders');
+                        }}
+                        className="w-full rounded-[16px] border border-[#E3E6FA] bg-[#F9FAFB] hover:bg-white p-3 flex items-center justify-between gap-2 text-left transition-colors"
+                      >
                         <div>
-                          <div className="font-mono font-bold text-navy-dark">{o.id}</div>
-                          <div className="text-[10px] text-slate-500">{o.store}</div>
+                          <div className="font-display text-[13px] font-bold text-[#465478]">
+                            {o.id}
+                          </div>
+                          <div className="text-[11px] text-[#8891AA]">{o.store}</div>
                         </div>
                         <div className="text-right">
-                          <div className="font-mono font-semibold text-navy-dark tabular-nums">
+                          <div className="font-display text-[13px] font-bold text-[#465478] num mb-1">
                             {formatINR(o.orderValue)}
                           </div>
                           <StatusBadge status={o.status} />
                         </div>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 </div>
-              </>
+              </div>
             )}
 
-            {inspectorTab === 'resolution' && (
-              <>
-                <div className="flex items-center justify-between pb-3 border-b border-slate-200">
-                  <div>
-                    <div className="font-semibold text-navy-dark">Matching Confidence</div>
-                    <div className="text-[11px] text-slate-500">
-                      Updated {formatDateTime(customer.identityResolution.lastUpdated)}
-                    </div>
-                  </div>
-                  <div className="text-xl font-bold text-emerald-700 tabular-nums">
-                    {customer.identityResolution.confidence}%
-                  </div>
-                </div>
+            {inspectorTab === 'identity' && (
+              <div className="space-y-4">
+                <Hint>
+                  Confidence: <strong>{activeCustomer.identityResolution.confidence}%</strong>. Records can be separated or re-merged with full audit logging.
+                </Hint>
 
                 <div>
-                  <div className="font-semibold text-navy-dark mb-1.5 flex items-center gap-1.5">
-                    <ShieldCheck className="w-3.5 h-3.5 text-gold-hover" /> Matching Evidence Factors
+                  <div className="text-[11px] font-display font-bold uppercase tracking-wider text-[#8891AA] mb-2">
+                    Matching Signals
                   </div>
-                  <ul className="space-y-1.5 text-slate-600">
-                    {customer.identityResolution.factors.map((f, i) => (
-                      <li key={i} className="bg-slate-50 px-3 py-2 rounded-[3px] border-l-2 border-gold">
-                        {f}
+                  <ul className="space-y-1.5 text-[12px] text-[#5C6888]">
+                    {activeCustomer.identityResolution.factors.map((f) => (
+                      <li key={f} className="flex items-start gap-2">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-[#2EB37E] mt-0.5 flex-shrink-0" />
+                        <span>{f}</span>
                       </li>
                     ))}
                   </ul>
                 </div>
 
-                <div>
-                  <div className="font-semibold text-navy-dark mb-1.5">Matched Merchant Records</div>
-                  <div className="space-y-2">
-                    {customer.identityResolution.matchedRecords.map((rec) => (
-                      <div key={rec.id} className="border border-slate-200 rounded-[4px] p-3">
-                        <div className="flex items-center justify-between">
-                          <span className="font-mono font-bold text-navy-dark">{rec.id}</span>
-                          <span
-                            className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-[3px] border ${
-                              rec.status === 'Separated'
-                                ? 'bg-red-50 text-red-700 border-red-200'
-                                : rec.status === 'Reviewable'
-                                ? 'bg-amber-50 text-amber-800 border-amber-200'
-                                : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                            }`}
-                          >
-                            {rec.status} ({rec.confidence}%)
-                          </span>
-                        </div>
-                        <div className="text-slate-500 mt-1">
-                          {rec.store} • {rec.channel}
-                        </div>
-                        <div className="flex gap-2 mt-2.5">
+                <div className="space-y-2.5">
+                  <div className="text-[11px] font-display font-bold uppercase tracking-wider text-[#8891AA]">
+                    Linked Channel Records
+                  </div>
+                  {activeCustomer.identityResolution.matchedRecords.map((rec) => (
+                    <div
+                      key={rec.id}
+                      className="rounded-[16px] border border-[#DFE1F5] bg-[#F9FAFB] p-3.5 space-y-2"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono text-[11.5px] font-bold text-[#465478]">
+                          {rec.id}
+                        </span>
+                        <span
+                          className={`text-[10.5px] font-display font-bold px-2.5 py-0.5 rounded-full ${
+                            rec.status === 'Separated'
+                              ? 'bg-[#FFF1EC] text-[#E05328]'
+                              : 'bg-[#ECFEF6] text-[#17825B]'
+                          }`}
+                        >
+                          {rec.status} ({rec.confidence}%)
+                        </span>
+                      </div>
+                      <StoreBadge store={rec.store} />
+                      <div className="pt-1 flex items-center gap-2">
+                        {rec.status !== 'Separated' ? (
                           <Button
                             variant="outline"
                             size="xs"
-                            disabled={rec.status === 'Merged' || rec.status === 'Primary'}
-                            onClick={() => updateIdentityRecord(customer.id, rec.id, 'merge', auditNote)}
+                            onClick={() => handleIdentityAction(rec, 'separate')}
                           >
-                            <GitMerge className="w-3 h-3" /> Confirm Merge
+                            <Unlink className="w-3 h-3 text-[#E05328]" /> Separate Identity
                           </Button>
+                        ) : (
                           <Button
-                            variant="ghost"
+                            variant="primary"
                             size="xs"
-                            disabled={rec.status === 'Separated' || rec.status === 'Primary'}
-                            onClick={() => setSeparateTarget(rec.id)}
+                            onClick={() => handleIdentityAction(rec, 'merge')}
                           >
-                            <Scissors className="w-3 h-3" /> Separate
+                            <Link2 className="w-3 h-3" /> Re-Merge Record
                           </Button>
-                        </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {inspectorTab === 'addresses' && (
+              <div className="space-y-4">
+                {activeCustomer.addresses.map((addr) => (
+                  <div
+                    key={addr.id}
+                    className="rounded-[16px] border border-[#DFE1F5] bg-[#F9FAFB] p-3.5"
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-1">
+                      <span className="inline-flex items-center gap-1.5 font-display text-[12.5px] font-bold text-[#465478]">
+                        <MapPin className="w-3.5 h-3.5 text-[#7584D6]" />
+                        {addr.city} ({addr.pincode})
+                      </span>
+                      <span
+                        className={`text-[10.5px] font-display font-bold px-2.5 py-0.5 rounded-full ${
+                          addr.status === 'Verified'
+                            ? 'bg-[#ECFEF6] text-[#17825B]'
+                            : 'bg-[#FFF1EC] text-[#E05328]'
+                        }`}
+                      >
+                        {addr.status}
+                      </span>
+                    </div>
+                    <div className="text-[12.5px] text-[#5C6888]">{addr.line1}</div>
+                    {addr.landmark && (
+                      <div className="text-[12px] text-[#17825B] font-semibold mt-0.5">
+                        Landmark: {addr.landmark}
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                {(activeCustomer.identityResolution.auditLog || []).length > 0 && (
+                  <div className="pt-2 border-t border-[#EEF0FA] space-y-2">
+                    <div className="text-[11px] font-display font-bold uppercase tracking-wider text-[#8891AA]">
+                      Governance Audit Log
+                    </div>
+                    {activeCustomer.identityResolution.auditLog.map((log, i) => (
+                      <div key={i} className="text-[11.5px] text-[#6E7896]">
+                        <span className="font-bold text-[#465478]">{log.actor}:</span> {log.action}{' '}
+                        <span className="text-[#9AA3BA]">({formatDateTime(log.timestamp)})</span>
                       </div>
                     ))}
                   </div>
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-navy-dark mb-1">Audit Reason Note</label>
-                  <input
-                    value={auditNote}
-                    onChange={(e) => setAuditNote(e.target.value)}
-                    className="w-full h-8 px-2.5 border border-slate-200 rounded-[4px] text-navy text-xs"
-                  />
-                </div>
-              </>
+                )}
+              </div>
             )}
+          </div>
 
-            {inspectorTab === 'history' && (
-              <>
-                <div>
-                  <div className="font-semibold text-navy-dark mb-2">Address Modification History</div>
-                  {customer.addressHistory?.length > 0 ? (
-                    <ul className="space-y-2 border-l-2 border-gold pl-3">
-                      {customer.addressHistory.map((h, i) => (
-                        <li key={i}>
-                          <div className="text-navy-dark font-medium">{h.change}</div>
-                          <div className="text-[10px] text-slate-400">{formatDateTime(h.date)}</div>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <div className="text-slate-500 bg-slate-50 p-3 rounded-[4px] border border-slate-200">
-                      No address edits recorded yet.
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <div className="font-semibold text-navy-dark mb-2">Identity Resolution Audit Log</div>
-                  <div className="space-y-2 border-l-2 border-navy pl-3">
-                    {(customer.identityResolution.auditLog || []).length > 0 ? (
-                      customer.identityResolution.auditLog.map((log, i) => (
-                        <div key={i}>
-                          <div className="font-semibold text-navy-dark">{log.actor}</div>
-                          <div className="text-slate-600">{log.action}</div>
-                          <div className="text-[10px] text-slate-400">{formatDateTime(log.timestamp)}</div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="text-slate-500">No manual resolution overrides logged.</div>
-                    )}
-                  </div>
-                </div>
-              </>
-            )}
+          <div className="pt-4 mt-4 border-t border-[#F1F2F9] flex items-center justify-between text-[11.5px] text-[#8891AA]">
+            <span className="inline-flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-[#7584D6]" />
+              Consent Tracking Enabled
+            </span>
+            <span>Retention: {privacySettings.dataRetentionDays}d</span>
           </div>
         </div>
       </div>
 
       <ConfirmDialog
-        open={Boolean(separateTarget)}
-        onClose={() => setSeparateTarget(null)}
+        open={Boolean(confirmIdentity)}
+        onClose={() => setConfirmIdentity(null)}
         onConfirm={() => {
-          if (separateTarget) {
-            updateIdentityRecord(customer.id, separateTarget, 'separate', auditNote);
-          }
+          if (!confirmIdentity) return;
+          updateIdentityRecord(
+            activeCustomer.id,
+            confirmIdentity.record.id,
+            confirmIdentity.action,
+            'Verified by Ops Reviewer under Governance Policy'
+          );
         }}
-        title={`Separate Identity Record ${separateTarget}?`}
-        description="Separating this record unlinks it from the merged customer profile and logs an entry in the identity resolution audit trail."
-        confirmLabel="Separate Record"
-        variant="danger"
+        title={
+          confirmIdentity?.action === 'separate'
+            ? `Separate Record ${confirmIdentity?.record?.id}?`
+            : `Confirm Identity Merge for ${confirmIdentity?.record?.id}?`
+        }
+        description="Evidence governance is active. This action updates merchant-scoped buyer link status and appends an immutable entry to the identity audit log."
+        confirmLabel={confirmIdentity?.action === 'separate' ? 'Separate Record' : 'Confirm Merge'}
+        variant={confirmIdentity?.action === 'separate' ? 'danger' : 'primary'}
       />
     </div>
   );

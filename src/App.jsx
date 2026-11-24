@@ -8,6 +8,8 @@ import { CustomerGraphPage } from './pages/CustomerGraphPage';
 import { RescueCentrePage } from './pages/RescueCentrePage';
 import { NdrRecoveryPage } from './pages/NdrRecoveryPage';
 import { AnalyticsPage } from './pages/AnalyticsPage';
+import { FinancialIntelligencePage } from './pages/FinancialIntelligencePage';
+import { IntegrationsPage } from './pages/IntegrationsPage';
 import { SettingsPage } from './pages/SettingsPage';
 
 export default function App() {
@@ -23,6 +25,8 @@ export default function App() {
           <Route path="rescue" element={<RescueCentrePage />} />
           <Route path="ndr" element={<NdrRecoveryPage />} />
           <Route path="analytics" element={<AnalyticsPage />} />
+          <Route path="financial" element={<FinancialIntelligencePage />} />
+          <Route path="integrations" element={<IntegrationsPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
