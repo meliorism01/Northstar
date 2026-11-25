@@ -10,4 +10,15 @@ import org.springframework.stereotype.Repository;
 public interface OrderStatusHistoryRepository extends JpaRepository<OrderStatusHistory, UUID> {
 
     List<OrderStatusHistory> findByOrderIdAndMerchantIdOrderByCreatedAtAsc(UUID orderId, UUID merchantId);
+
+    @org.springframework.data.jpa.repository.Query("""
+            SELECT h FROM OrderStatusHistory h
+            JOIN FETCH h.order o
+            WHERE h.merchantId = :merchantId
+              AND o.customer.id = :customerId
+            ORDER BY h.createdAt DESC
+            """)
+    List<OrderStatusHistory> findByMerchantIdAndCustomerIdOrderByCreatedAtDesc(
+            @org.springframework.data.repository.query.Param("merchantId") UUID merchantId,
+            @org.springframework.data.repository.query.Param("customerId") UUID customerId);
 }

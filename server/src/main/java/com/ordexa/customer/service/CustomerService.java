@@ -7,10 +7,16 @@ import com.ordexa.common.response.PagedResponse;
 import com.ordexa.common.validation.PaginationValidator;
 import com.ordexa.customer.dto.CustomerSummaryDto;
 import com.ordexa.customer.entity.Customer;
+import com.ordexa.customer.intelligence.entity.CustomerBehaviouralEvent;
+import com.ordexa.customer.intelligence.entity.CustomerBehaviouralEventType;
+import com.ordexa.customer.intelligence.repository.CustomerBehaviouralEventRepository;
 import com.ordexa.customer.repository.CustomerRepository;
 import com.ordexa.tenant.context.TenantContext;
 import com.ordexa.tenant.context.TenantContextHolder;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import org.springframework.data.domain.Page;
@@ -26,9 +32,13 @@ public class CustomerService {
     private static final Pattern DIGITS_ONLY = Pattern.compile("^\\d{10,15}$");
 
     private final CustomerRepository customerRepository;
+    private final CustomerBehaviouralEventRepository behaviouralEventRepository;
 
-    public CustomerService(CustomerRepository customerRepository) {
+    public CustomerService(
+            CustomerRepository customerRepository,
+            CustomerBehaviouralEventRepository behaviouralEventRepository) {
         this.customerRepository = customerRepository;
+        this.behaviouralEventRepository = behaviouralEventRepository;
     }
 
     public static String normalizeAndValidatePhone(String rawPhone) {
@@ -73,11 +83,28 @@ public class CustomerService {
 
         return customerRepository.findByMerchantIdAndPhoneNumber(merchantId, normalizedPhone)
                 .map(existing -> {
-                    existing.setFullName(cleanName);
-                    if (cleanEmail != null) {
-                        existing.setEmail(cleanEmail);
+                    boolean changed = false;
+                    if (!Objects.equals(existing.getFullName(), cleanName)) {
+                        existing.setFullName(cleanName);
+                        changed = true;
                     }
-                    return customerRepository.save(existing);
+                    if (cleanEmail != null && !Objects.equals(existing.getEmail(), cleanEmail)) {
+                        existing.setEmail(cleanEmail);
+                        changed = true;
+                    }
+                    Customer saved = customerRepository.save(existing);
+                    if (changed) {
+                        behaviouralEventRepository.save(new CustomerBehaviouralEvent(
+                                UUID.randomUUID(),
+                                merchantId,
+                                saved.getId(),
+                                null,
+                                CustomerBehaviouralEventType.CUSTOMER_PROFILE_UPDATED,
+                                "Customer profile updated",
+                                "Updated customer profile details for " + saved.getFullName(),
+                                OffsetDateTime.now(ZoneOffset.UTC)));
+                    }
+                    return saved;
                 })
                 .orElseGet(() -> {
                     Customer created = new Customer(
@@ -86,7 +113,17 @@ public class CustomerService {
                             cleanName,
                             normalizedPhone,
                             cleanEmail);
-                    return customerRepository.save(created);
+                    Customer saved = customerRepository.save(created);
+                    behaviouralEventRepository.save(new CustomerBehaviouralEvent(
+                            UUID.randomUUID(),
+                            merchantId,
+                            saved.getId(),
+                            null,
+                            CustomerBehaviouralEventType.CUSTOMER_CREATED,
+                            "Customer profile registered",
+                            "Created merchant-scoped customer profile for " + saved.getFullName(),
+                            OffsetDateTime.now(ZoneOffset.UTC)));
+                    return saved;
                 });
     }
 

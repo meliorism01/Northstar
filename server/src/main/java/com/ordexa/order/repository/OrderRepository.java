@@ -43,4 +43,13 @@ public interface OrderRepository extends JpaRepository<Order, UUID>, JpaSpecific
     List<Order> findByMerchantIdAndCustomerIdOrderByCreatedAtDesc(
             @Param("merchantId") UUID merchantId,
             @Param("customerId") UUID customerId);
+
+    @Query("""
+            SELECT o FROM Order o
+            JOIN FETCH o.customer c
+            WHERE o.merchantId = :merchantId
+            ORDER BY o.createdAt DESC
+            """)
+    List<Order> findAllByMerchantIdWithCustomerOrderByCreatedAtDesc(
+            @Param("merchantId") UUID merchantId);
 }

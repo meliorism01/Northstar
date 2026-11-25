@@ -13,4 +13,14 @@ public interface OrderItemRepository extends JpaRepository<OrderItem, UUID> {
     List<OrderItem> findByOrderIdAndMerchantId(UUID orderId, UUID merchantId);
 
     List<OrderItem> findByOrderIdInAndMerchantId(Collection<UUID> orderIds, UUID merchantId);
+
+    @org.springframework.data.jpa.repository.Query("""
+            SELECT oi FROM OrderItem oi
+            JOIN FETCH oi.order o
+            JOIN FETCH o.customer c
+            WHERE oi.merchantId = :merchantId
+            ORDER BY o.createdAt DESC
+            """)
+    List<OrderItem> findAllByMerchantIdWithOrderAndCustomer(
+            @org.springframework.data.repository.query.Param("merchantId") UUID merchantId);
 }

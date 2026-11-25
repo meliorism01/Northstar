@@ -33,4 +33,6 @@ public interface CustomerRepository extends JpaRepository<Customer, UUID> {
             Pageable pageable);
 
     long countByMerchantId(UUID merchantId);
+
+    java.util.List<Customer> findByMerchantIdOrderByCreatedAtDesc(UUID merchantId);
 }

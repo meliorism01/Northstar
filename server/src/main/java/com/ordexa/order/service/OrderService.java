@@ -10,6 +10,9 @@ import com.ordexa.common.validation.PaginationValidator;
 import com.ordexa.customer.dto.CustomerDetailDto;
 import com.ordexa.customer.dto.CustomerSummaryDto;
 import com.ordexa.customer.entity.Customer;
+import com.ordexa.customer.intelligence.entity.CustomerBehaviouralEvent;
+import com.ordexa.customer.intelligence.entity.CustomerBehaviouralEventType;
+import com.ordexa.customer.intelligence.repository.CustomerBehaviouralEventRepository;
 import com.ordexa.customer.repository.CustomerRepository;
 import com.ordexa.customer.service.CustomerService;
 import com.ordexa.order.dto.CreateOrderRequest;
@@ -66,6 +69,7 @@ public class OrderService {
     private final OrderStatusHistoryRepository statusHistoryRepository;
     private final CustomerRepository customerRepository;
     private final CustomerService customerService;
+    private final CustomerBehaviouralEventRepository behaviouralEventRepository;
     private final AuditLogRepository auditLogRepository;
     private final Clock clock;
 
@@ -75,6 +79,7 @@ public class OrderService {
             OrderStatusHistoryRepository statusHistoryRepository,
             CustomerRepository customerRepository,
             CustomerService customerService,
+            CustomerBehaviouralEventRepository behaviouralEventRepository,
             AuditLogRepository auditLogRepository,
             Clock clock) {
         this.orderRepository = orderRepository;
@@ -82,6 +87,7 @@ public class OrderService {
         this.statusHistoryRepository = statusHistoryRepository;
         this.customerRepository = customerRepository;
         this.customerService = customerService;
+        this.behaviouralEventRepository = behaviouralEventRepository;
         this.auditLogRepository = auditLogRepository;
         this.clock = clock;
     }
@@ -218,6 +224,29 @@ public class OrderService {
 
         Order saved = orderRepository.save(order);
 
+        if (customer.getTotalOrders() >= 2) {
+            behaviouralEventRepository.save(new CustomerBehaviouralEvent(
+                    UUID.randomUUID(),
+                    merchantId,
+                    customer.getId(),
+                    saved.getId(),
+                    CustomerBehaviouralEventType.REPEAT_PURCHASE,
+                    "Repeat purchase placed (" + saved.getOrderNumber() + ")",
+                    "Customer placed repeat order #" + customer.getTotalOrders() + " for " + totalAmount + " " + saved.getCurrency(),
+                    now));
+        }
+        if (paymentStatus == PaymentStatus.PAID) {
+            behaviouralEventRepository.save(new CustomerBehaviouralEvent(
+                    UUID.randomUUID(),
+                    merchantId,
+                    customer.getId(),
+                    saved.getId(),
+                    CustomerBehaviouralEventType.PAYMENT_COMPLETED,
+                    "Payment completed for " + saved.getOrderNumber(),
+                    "Payment of " + totalAmount + " " + saved.getCurrency() + " completed via " + paymentMethod.name(),
+                    now));
+        }
+
         auditLogRepository.save(new AuditLog(
                 merchantId,
                 ctx.userId(),
@@ -330,11 +359,24 @@ public class OrderService {
         if (request.customerNotes() != null) {
             order.setCustomerNotes(request.customerNotes().trim());
         }
+        boolean becamePaid = request.paymentStatus() == PaymentStatus.PAID
+                && order.getPaymentStatus() != PaymentStatus.PAID;
         if (request.paymentStatus() != null) {
             order.setPaymentStatus(request.paymentStatus());
         }
 
         Order saved = orderRepository.save(order);
+        if (becamePaid) {
+            behaviouralEventRepository.save(new CustomerBehaviouralEvent(
+                    UUID.randomUUID(),
+                    ctx.merchantId(),
+                    saved.getCustomer().getId(),
+                    saved.getId(),
+                    CustomerBehaviouralEventType.PAYMENT_COMPLETED,
+                    "Payment completed for " + saved.getOrderNumber(),
+                    "Payment of " + saved.getTotalAmount() + " " + saved.getCurrency() + " marked PAID",
+                    OffsetDateTime.now(clock)));
+        }
         auditLogRepository.save(new AuditLog(
                 ctx.merchantId(),
                 ctx.userId(),
@@ -373,6 +415,15 @@ public class OrderService {
         order.setOrderStatus(targetStatus);
         if (targetStatus == OrderStatus.DELIVERED && order.getPaymentStatus() == PaymentStatus.PENDING) {
             order.setPaymentStatus(PaymentStatus.PAID);
+            behaviouralEventRepository.save(new CustomerBehaviouralEvent(
+                    UUID.randomUUID(),
+                    ctx.merchantId(),
+                    order.getCustomer().getId(),
+                    order.getId(),
+                    CustomerBehaviouralEventType.PAYMENT_COMPLETED,
+                    "Payment collected on delivery (" + order.getOrderNumber() + ")",
+                    "Payment of " + order.getTotalAmount() + " " + order.getCurrency() + " collected via " + order.getPaymentMethod().name(),
+                    OffsetDateTime.now(clock)));
         }
         if (targetStatus == OrderStatus.CANCELLED) {
             Customer customer = order.getCustomer();

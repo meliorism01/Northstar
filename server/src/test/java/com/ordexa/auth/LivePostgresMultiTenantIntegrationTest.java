@@ -9,6 +9,10 @@ import com.ordexa.auth.dto.RegisterRequest;
 import com.ordexa.auth.dto.RegisterResponse;
 import com.ordexa.auth.service.AuthenticationService;
 import com.ordexa.auth.service.AuthenticationService.AuthResultWithRefreshCookie;
+import com.ordexa.customer.intelligence.dto.CustomerIntelligenceDtos.Customer360Dto;
+import com.ordexa.customer.intelligence.dto.CustomerIntelligenceDtos.GraphResponseDto;
+import com.ordexa.customer.intelligence.dto.CustomerIntelligenceDtos.IntelligenceOverviewDto;
+import com.ordexa.customer.intelligence.service.CustomerIntelligenceService;
 import com.ordexa.health.dto.HealthResponse;
 import com.ordexa.health.service.HealthCheckService;
 import com.ordexa.membership.entity.MerchantRole;
@@ -89,6 +93,9 @@ class LivePostgresMultiTenantIntegrationTest {
     @Autowired
     private OrderService orderService;
 
+    @Autowired
+    private CustomerIntelligenceService customerIntelligenceService;
+
     @Test
     void verifiesActualPostgreSqlTablesFlywayV1V2V3AndOrderCreationAndLifecycle() throws Exception {
         HealthResponse health = healthCheckService.checkHealth();
@@ -117,7 +124,8 @@ class LivePostgresMultiTenantIntegrationTest {
                 "customers",
                 "orders",
                 "order_items",
-                "order_status_history"
+                "order_status_history",
+                "customer_behavioural_events"
         );
 
         String uniqueEmail = "pg.v3." + UUID.randomUUID().toString().substring(0, 8) + "@ordexa.in";
@@ -171,5 +179,21 @@ class LivePostgresMultiTenantIntegrationTest {
 
         assertThat(confirmedOrder.order().orderStatus()).isEqualTo(OrderStatus.CONFIRMED);
         assertThat(confirmedOrder.statusHistory()).hasSize(2);
+
+        IntelligenceOverviewDto overview = customerIntelligenceService.getOverview();
+        assertThat(overview.totalCustomers()).isEqualTo(1);
+        assertThat(overview.newCustomers()).isEqualTo(1);
+        assertThat(overview.totalQualifyingRevenue()).isEqualByComparingTo("1490.00");
+
+        Customer360Dto c360 = customerIntelligenceService.getCustomer360(createdOrder.customer().id());
+        assertThat(c360.profile().segmentIds()).contains("NEW_CUSTOMER");
+        assertThat(c360.productPreferences()).hasSize(1);
+        assertThat(c360.timeline()).hasSizeGreaterThanOrEqualTo(3);
+
+        GraphResponseDto graph = customerIntelligenceService.getGraph(
+                null, null, null, null, null, null, 100);
+        assertThat(graph.metadata().customerNodes()).isEqualTo(1);
+        assertThat(graph.metadata().orderNodes()).isEqualTo(1);
+        assertThat(graph.metadata().productNodes()).isEqualTo(1);
     }
 }

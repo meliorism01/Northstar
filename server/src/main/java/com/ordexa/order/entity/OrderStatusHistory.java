@@ -85,6 +85,10 @@ public class OrderStatusHistory {
         return merchantId;
     }
 
+    public Order getOrder() {
+        return order;
+    }
+
     public OrderStatus getPreviousStatus() {
         return previousStatus;
     }
