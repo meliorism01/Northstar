@@ -5,9 +5,9 @@ spring:
     active: ${SPRING_PROFILES_ACTIVE:local}
 
   datasource:
-    url: jdbc:postgresql://${DB_HOST:127.0.0.1}:${DB_PORT:5433}/${DB_NAME:ordexa_db}
-    username: ${DB_USERNAME:ordexa_app}
-    password: ${DB_PASSWORD:}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://${DB_HOST:127.0.0.1}:${DB_PORT:5433}/${DB_NAME:ordexa_db}}
+    username: ${SPRING_DATASOURCE_USERNAME:${DB_USERNAME:ordexa_app}}
+    password: ${SPRING_DATASOURCE_PASSWORD:${DB_PASSWORD:}}
     driver-class-name: org.postgresql.Driver
     hikari:
       pool-name: OrdexaHikariPool

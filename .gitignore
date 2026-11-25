@@ -8,8 +8,11 @@ dist/
 .env.*.local
 server/.env
 
-# Local PostgreSQL cluster data directory
+# Local PostgreSQL cluster data directory & database dumps
 .pgdata/
+*.dump
+*.bak
+backups/
 
 # Logs & OS metadata
 *.log
