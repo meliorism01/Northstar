@@ -1,8 +1,31 @@
+# Frontend dependencies & build artifacts
 node_modules/
 dist/
+
+# Environment & secrets (never commit real credentials)
 .env
 .env.local
+.env.*.local
+server/.env
+
+# Local PostgreSQL cluster data directory
+.pgdata/
+
+# Logs & OS metadata
 *.log
 .DS_Store
 Thumbs.db
+
+# Local design reference scrape
 template/
+
+# Backend (Maven / Java / IDE)
+server/target/
+server/.mvn/wrapper/maven-wrapper.jar
+*.class
+*.jar
+*.war
+*.ear
+.idea/
+*.iml
+.vscode/
