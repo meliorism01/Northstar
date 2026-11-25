@@ -161,3 +161,14 @@ npm run dev
 ```
 - Public Landing Page: `http://127.0.0.1:5173/`
 - Protected Merchant Console: `http://127.0.0.1:5173/app/orders`
+
+---
+
+## 6. Database Configuration (Local vs. Supabase Cloud)
+
+ORDEXA supports both **Local PostgreSQL** and **Supabase Cloud PostgreSQL** (Shared Pooler — Session Mode with `sslmode=require`) via Spring Boot profiles and environment variables—no code changes required:
+
+- **Local PostgreSQL (default):** `SPRING_PROFILES_ACTIVE=local` connects to `127.0.0.1:5433/ordexa_db`.
+- **Supabase Cloud PostgreSQL:** Set `SPRING_PROFILES_ACTIVE=supabase` and supply `SUPABASE_DB_PASSWORD` (or `SPRING_DATASOURCE_PASSWORD`) via your local `.env` or shell environment.
+
+See [docs/SUPABASE_SETUP.md](docs/SUPABASE_SETUP.md) for full setup instructions, [docs/SUPABASE_MIGRATION_AUDIT.md](docs/SUPABASE_MIGRATION_AUDIT.md) for the architecture audit, and [docs/LOCAL_TO_SUPABASE_DATA_MIGRATION.md](docs/LOCAL_TO_SUPABASE_DATA_MIGRATION.md) for backup and data migration procedures.
