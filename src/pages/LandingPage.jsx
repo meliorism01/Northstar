@@ -161,9 +161,14 @@ export function LandingPage() {
           </nav>
 
           <div className="hidden md:flex items-center gap-2.5">
-            <Link to="/app/orders">
+            <Link to="/login">
+              <Button variant="ghost" size="sm">
+                Sign In
+              </Button>
+            </Link>
+            <Link to="/register">
               <Button variant="outline" size="sm">
-                Order Queue
+                Register Store
               </Button>
             </Link>
             <Link to="/app/dashboard">

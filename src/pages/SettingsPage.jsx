@@ -1,10 +1,15 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Settings as SettingsIcon,
   Sliders,
   Shield,
   Bell,
   RotateCcw,
+  Building2,
+  Users,
+  UserPlus,
+  CheckCircle2,
+  AlertTriangle,
 } from 'lucide-react';
 import {
   PageHeader,
@@ -12,10 +17,18 @@ import {
   Tabs,
   ConfirmDialog,
   Hint,
+  Field,
   inputClass,
 } from '../components/ui/Primitives';
 import { useOrdexaStore } from '../store/useOrdexaStore';
-import { formatINR } from '../utils/formatters';
+import { useAuthStore, hasMinimumRole } from '../store/useAuthStore';
+import {
+  fetchCurrentMerchantWorkspace,
+  fetchWorkspaceMembers,
+  updateMerchantBusinessName,
+  addWorkspaceMember,
+} from '../services/api/workspaceApi';
+import { formatINR, formatDateTime } from '../utils/formatters';
 
 function ToggleRow({ title, description, checked, onChange }) {
   return (
@@ -29,14 +42,12 @@ function ToggleRow({ title, description, checked, onChange }) {
         role="switch"
         aria-checked={checked}
         onClick={() => onChange(!checked)}
-        className={`relative inline-flex h-6 w-11 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 cursor-pointer ${
-          checked ? 'bg-[#7584D6]' : 'bg-[#D8DDF0]'
-        }`}
+        className={`relative inline-flex h-6 w-11 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 cursor-pointer ${checked ? 'bg-[#7584D6]' : 'bg-[#D8DDF0]'
+          }`}
       >
         <span
-          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition duration-200 ${
-            checked ? 'translate-x-5' : 'translate-x-0'
-          }`}
+          className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition duration-200 ${checked ? 'translate-x-5' : 'translate-x-0'
+            }`}
         />
       </button>
     </div>
@@ -53,31 +64,123 @@ export function SettingsPage() {
   const updatePrivacySetting = useOrdexaStore((s) => s.updatePrivacySetting);
   const updateNotificationPref = useOrdexaStore((s) => s.updateNotificationPref);
   const resetDemoData = useOrdexaStore((s) => s.resetDemoData);
+  const addToast = useOrdexaStore((s) => s.addToast);
 
-  const [activeTab, setActiveTab] = useState('rules');
+  const activeWorkspace = useAuthStore((s) => s.activeWorkspace);
+  const currentRole = useAuthStore((s) => s.currentRole);
+  const refreshWorkspaces = useAuthStore((s) => s.refreshWorkspaces);
+
+  const [activeTab, setActiveTab] = useState('workspace');
   const [confirmReset, setConfirmReset] = useState(false);
+
+  const [workspaceDetail, setWorkspaceDetail] = useState(null);
+  const [members, setMembers] = useState([]);
+  const [businessNameInput, setBusinessNameInput] = useState(
+    activeWorkspace?.businessName || ''
+  );
+  const [wsError, setWsError] = useState(null);
+  const [wsSuccess, setWsSuccess] = useState(null);
+  const [savingName, setSavingName] = useState(false);
+
+  const [inviteForm, setInviteForm] = useState({
+    fullName: '',
+    email: '',
+    initialPassword: 'StrongPassword123!',
+    role: 'VIEWER',
+  });
+  const [inviting, setInviting] = useState(false);
+
+  const loadWorkspaceData = useCallback(async () => {
+    if (!activeWorkspace?.merchantId) return;
+    try {
+      const [detail, memberList] = await Promise.all([
+        fetchCurrentMerchantWorkspace(),
+        fetchWorkspaceMembers(activeWorkspace.merchantId),
+      ]);
+      setWorkspaceDetail(detail);
+      setBusinessNameInput(detail?.businessName || activeWorkspace.businessName);
+      setMembers(memberList || []);
+    } catch (err) {
+      setWsError(err.message || 'Unable to load workspace details');
+    }
+  }, [activeWorkspace?.merchantId, activeWorkspace?.businessName]);
+
+  useEffect(() => {
+    if (activeTab === 'workspace' && activeWorkspace?.merchantId) {
+      loadWorkspaceData();
+    }
+  }, [activeTab, activeWorkspace?.merchantId, loadWorkspaceData]);
+
+  const handleUpdateBusinessName = async (e) => {
+    e.preventDefault();
+    if (!activeWorkspace?.merchantId) return;
+    setWsError(null);
+    setWsSuccess(null);
+    setSavingName(true);
+    try {
+      const updated = await updateMerchantBusinessName(
+        activeWorkspace.merchantId,
+        businessNameInput.trim()
+      );
+      setWorkspaceDetail(updated);
+      await refreshWorkspaces();
+      setWsSuccess(`Updated business name to "${updated.businessName}"`);
+      addToast('Workspace name updated in PostgreSQL', 'success');
+    } catch (err) {
+      setWsError(err.message || 'Failed to update business name');
+    } finally {
+      setSavingName(false);
+    }
+  };
+
+  const handleInviteMember = async (e) => {
+    e.preventDefault();
+    if (!activeWorkspace?.merchantId) return;
+    setWsError(null);
+    setWsSuccess(null);
+    setInviting(true);
+    try {
+      const created = await addWorkspaceMember(activeWorkspace.merchantId, inviteForm);
+      setMembers((prev) => [...prev, created]);
+      setInviteForm({
+        fullName: '',
+        email: '',
+        initialPassword: 'StrongPassword123!',
+        role: 'VIEWER',
+      });
+      setWsSuccess(`Added ${created.email} as ${created.role}`);
+      addToast(`Added ${created.fullName} (${created.role}) to workspace`, 'success');
+    } catch (err) {
+      setWsError(err.message || 'Failed to add member');
+    } finally {
+      setInviting(false);
+    }
+  };
 
   const highCount = orders.filter((o) => o.attentionLevel === 'HIGH').length;
   const mediumCount = orders.filter((o) => o.attentionLevel === 'MEDIUM').length;
+  const isOwner = hasMinimumRole(currentRole, 'OWNER');
+  const isAdminOrOwner = hasMinimumRole(currentRole, 'ADMIN');
 
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Governance · Rules & Privacy"
+        eyebrow="Governance · Multi-Tenant Workspace & Rules"
         title="Workspace"
         accentWord="Settings"
-        subtitle="Tune deterministic RTO scoring thresholds, enforce merchant-scoped buyer privacy, and configure operator alert rules."
+        subtitle="Manage your PostgreSQL-backed merchant workspace, role-based team memberships, and pre-dispatch RTO scoring thresholds."
         icon={SettingsIcon}
         iconTone="peri"
         actions={
           <Button variant="danger" size="sm" onClick={() => setConfirmReset(true)}>
-            <RotateCcw className="w-3.5 h-3.5" /> Reset Workspace Demo
+            <RotateCcw className="w-3.5 h-3.5" /> Reset Order Sandbox
           </Button>
         }
       />
 
       <Tabs
         items={[
+          { id: 'workspace', label: 'Workspace & Team (PostgreSQL)' },
           { id: 'rules', label: 'Scoring & Automation Rules' },
           { id: 'privacy', label: 'Privacy & Data Governance' },
           { id: 'notifications', label: 'Operator Notifications' },
@@ -85,6 +188,208 @@ export function SettingsPage() {
         value={activeTab}
         onChange={setActiveTab}
       />
+
+      {activeTab === 'workspace' && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Left: Merchant Profile & RBAC Update */}
+          <div className="lg:col-span-6 rescale-card p-6 sm:p-7 space-y-5">
+            <div className="flex items-center gap-3 pb-4 border-b border-[#EEF0FA]">
+              <Building2 className="w-5 h-5 text-[#7584D6]" />
+              <div>
+                <h3 className="font-display text-[17px] font-bold text-[#465478]">
+                  Active Merchant Workspace (PostgreSQL)
+                </h3>
+                <p className="text-[12.5px] text-[#8891AA]">
+                  Tenant-isolated workspace record and role permissions
+                </p>
+              </div>
+            </div>
+
+            {wsError && (
+              <div
+                role="alert"
+                data-testid="workspace-settings-error"
+                className="rounded-[16px] bg-[#FFF0F2] border border-[#FECDD6] px-4 py-3 flex items-start gap-2.5 text-[12.5px] text-[#D13B56] font-display font-semibold"
+              >
+                <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <span>{wsError}</span>
+              </div>
+            )}
+
+            {wsSuccess && (
+              <div
+                data-testid="workspace-settings-success"
+                className="rounded-[16px] bg-[#ECFEF6] border border-[#C3F3DE] px-4 py-3 flex items-start gap-2.5 text-[12.5px] text-[#17825B] font-display font-semibold"
+              >
+                <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                <span>{wsSuccess}</span>
+              </div>
+            )}
+
+            <div className="rounded-[18px] bg-[#F9FAFB] border border-[#E3E6FA] p-4 space-y-2 text-[12.5px]">
+              <div className="flex justify-between">
+                <span className="text-[#8891AA]">Merchant UUID</span>
+                <span className="font-mono font-bold text-[#465478]">
+                  {workspaceDetail?.merchantId || activeWorkspace?.merchantId}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[#8891AA]">Business Slug</span>
+                <span className="font-mono text-[#545C9E]">
+                  {workspaceDetail?.businessSlug || activeWorkspace?.businessSlug}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[#8891AA]">Your Workspace Role</span>
+                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-display font-bold bg-[#EEF2FF] text-[#545C9E] border border-[#DFE1F5]">
+                  {currentRole}
+                </span>
+              </div>
+            </div>
+
+            <form onSubmit={handleUpdateBusinessName} className="space-y-4">
+              <Field
+                label="Business Display Name"
+                hint={
+                  isOwner
+                    ? 'As OWNER, you can rename this merchant workspace.'
+                    : `Only an OWNER can rename the workspace (your current role is ${currentRole}).`
+                }
+              >
+                <input
+                  type="text"
+                  data-testid="settings-business-name-input"
+                  value={businessNameInput}
+                  onChange={(e) => setBusinessNameInput(e.target.value)}
+                  disabled={!isOwner}
+                  className={inputClass}
+                />
+              </Field>
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
+                loading={savingName}
+                disabled={!isOwner}
+                data-testid="settings-save-business-name-btn"
+              >
+                Save Workspace Name (OWNER Only)
+              </Button>
+            </form>
+          </div>
+
+          {/* Right: Team Memberships & RBAC Invitations */}
+          <div className="lg:col-span-6 rescale-card p-6 sm:p-7 space-y-5">
+            <div className="flex items-center gap-3 pb-4 border-b border-[#EEF0FA]">
+              <Users className="w-5 h-5 text-[#7584D6]" />
+              <div>
+                <h3 className="font-display text-[17px] font-bold text-[#465478]">
+                  Workspace Team Memberships ({members.length})
+                </h3>
+                <p className="text-[12.5px] text-[#8891AA]">
+                  Role-based access control across OWNER, ADMIN, MANAGER, OPERATOR, and VIEWER
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-2.5 max-h-60 overflow-y-auto pr-1" data-testid="workspace-members-list">
+              {members.map((m) => (
+                <div
+                  key={m.membershipId}
+                  className="rounded-[16px] bg-[#F9FAFB] border border-[#E3E6FA] px-4 py-3 flex items-center justify-between gap-2"
+                >
+                  <div className="min-w-0">
+                    <div className="font-display text-[13.5px] font-bold text-[#465478] truncate">
+                      {m.fullName}
+                    </div>
+                    <div className="text-[11.5px] text-[#8891AA] truncate">
+                      {m.email} · Joined {formatDateTime(m.joinedAt)}
+                    </div>
+                  </div>
+                  <span className="px-2.5 py-0.5 rounded-full text-[10.5px] font-display font-bold bg-white text-[#545C9E] border border-[#DFE1F5]">
+                    {m.role}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            {isAdminOrOwner && (
+              <form
+                onSubmit={handleInviteMember}
+                className="pt-4 border-t border-[#EEF0FA] space-y-3"
+              >
+                <div className="flex items-center gap-2 font-display text-[13.5px] font-bold text-[#465478]">
+                  <UserPlus className="w-4 h-4 text-[#7584D6]" />
+                  <span>Add Member to This Workspace</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Field label="Full Name" required>
+                    <input
+                      type="text"
+                      data-testid="invite-member-name"
+                      value={inviteForm.fullName}
+                      onChange={(e) =>
+                        setInviteForm({ ...inviteForm, fullName: e.target.value })
+                      }
+                      placeholder="Priya Nair"
+                      className={inputClass}
+                      required
+                    />
+                  </Field>
+                  <Field label="Email Address" required>
+                    <input
+                      type="email"
+                      data-testid="invite-member-email"
+                      value={inviteForm.email}
+                      onChange={(e) =>
+                        setInviteForm({ ...inviteForm, email: e.target.value })
+                      }
+                      placeholder="priya@example.com"
+                      className={inputClass}
+                      required
+                    />
+                  </Field>
+                  <Field label="Role" required>
+                    <select
+                      data-testid="invite-member-role"
+                      value={inviteForm.role}
+                      onChange={(e) =>
+                        setInviteForm({ ...inviteForm, role: e.target.value })
+                      }
+                      className={inputClass}
+                    >
+                      <option value="ADMIN">ADMIN</option>
+                      <option value="MANAGER">MANAGER</option>
+                      <option value="OPERATOR">OPERATOR</option>
+                      <option value="VIEWER">VIEWER</option>
+                    </select>
+                  </Field>
+                  <Field label="Initial Password (if new user)">
+                    <input
+                      type="text"
+                      data-testid="invite-member-password"
+                      value={inviteForm.initialPassword}
+                      onChange={(e) =>
+                        setInviteForm({ ...inviteForm, initialPassword: e.target.value })
+                      }
+                      className={inputClass}
+                    />
+                  </Field>
+                </div>
+                <Button
+                  type="submit"
+                  variant="outline"
+                  size="sm"
+                  loading={inviting}
+                  data-testid="invite-member-submit-btn"
+                >
+                  <UserPlus className="w-3.5 h-3.5 text-[#7584D6]" /> Grant Workspace Membership
+                </Button>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
 
       {activeTab === 'rules' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -366,9 +671,9 @@ export function SettingsPage() {
         open={confirmReset}
         onClose={() => setConfirmReset(false)}
         onConfirm={resetDemoData}
-        title="Reset Entire ORDEXA Demo Workspace?"
+        title="Reset Simulated Order Sandbox?"
         description="All simulated orders, buyer replies, Customer Graph edits, NDR recoveries, and rule slider changes will revert to the initial baseline."
-        confirmLabel="Reset Demo Data"
+        confirmLabel="Reset Order Sandbox"
         variant="danger"
       />
     </div>

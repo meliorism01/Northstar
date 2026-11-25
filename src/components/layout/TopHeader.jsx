@@ -6,12 +6,14 @@ import {
   Menu,
   PenSquare,
   CheckCheck,
-  Store,
+  Building2,
   X,
   ArrowRight,
+  LogOut,
 } from 'lucide-react';
 import { Button, Avatar, AttentionBadge } from '../ui/Primitives';
 import { useOrdexaStore } from '../../store/useOrdexaStore';
+import { useAuthStore } from '../../store/useAuthStore';
 import { formatINR } from '../../utils/formatters';
 
 export function TopHeader({ onOpenMobileNav }) {
@@ -22,10 +24,14 @@ export function TopHeader({ onOpenMobileNav }) {
   const setSelectedCustomerId = useOrdexaStore((s) => s.setSelectedCustomerId);
   const orders = useOrdexaStore((s) => s.orders);
   const customers = useOrdexaStore((s) => s.customers);
-  const stores = useOrdexaStore((s) => s.stores);
   const notifications = useOrdexaStore((s) => s.notifications);
   const markAllNotificationsRead = useOrdexaStore((s) => s.markAllNotificationsRead);
   const simulateShopifyWebhook = useOrdexaStore((s) => s.simulateShopifyWebhook);
+
+  const user = useAuthStore((s) => s.user);
+  const activeWorkspace = useAuthStore((s) => s.activeWorkspace);
+  const currentRole = useAuthStore((s) => s.currentRole);
+  const logout = useAuthStore((s) => s.logout);
 
   const [bellOpen, setBellOpen] = useState(false);
   const [searchFocused, setSearchFocused] = useState(false);
@@ -33,7 +39,6 @@ export function TopHeader({ onOpenMobileNav }) {
   const searchRef = useRef(null);
 
   const unreadCount = notifications.filter((n) => !n.read).length;
-  const activeStoresCount = stores.filter((st) => st.webhookActive || st.integrationMode === 'live-local').length;
 
   useEffect(() => {
     const onDocClick = (e) => {
@@ -51,25 +56,25 @@ export function TopHeader({ onOpenMobileNav }) {
   const q = globalSearch.trim().toLowerCase();
   const matchedOrders = q
     ? orders
-        .filter(
-          (o) =>
-            o.id.toLowerCase().includes(q) ||
-            o.customerName.toLowerCase().includes(q) ||
-            o.address.city.toLowerCase().includes(q) ||
-            o.courier.toLowerCase().includes(q)
-        )
-        .slice(0, 4)
+      .filter(
+        (o) =>
+          o.id.toLowerCase().includes(q) ||
+          o.customerName.toLowerCase().includes(q) ||
+          o.address.city.toLowerCase().includes(q) ||
+          o.courier.toLowerCase().includes(q)
+      )
+      .slice(0, 4)
     : [];
 
   const matchedCustomers = q
     ? customers
-        .filter(
-          (c) =>
-            c.name.toLowerCase().includes(q) ||
-            c.city.toLowerCase().includes(q) ||
-            c.id.toLowerCase().includes(q)
-        )
-        .slice(0, 3)
+      .filter(
+        (c) =>
+          c.name.toLowerCase().includes(q) ||
+          c.city.toLowerCase().includes(q) ||
+          c.id.toLowerCase().includes(q)
+      )
+      .slice(0, 3)
     : [];
 
   const handleSimulateOrder = () => {
@@ -79,9 +84,18 @@ export function TopHeader({ onOpenMobileNav }) {
     }
   };
 
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login', { replace: true });
+  };
+
+  const displayName = user?.fullName || 'Ananya Mehta';
+  const displayWorkspace = activeWorkspace?.businessName || 'Merchant Workspace';
+  const displayRole = currentRole || 'OWNER';
+
   return (
     <header className="h-[78px] px-4 sm:px-8 flex items-center justify-between gap-4 bg-[#F9FAFB]/90 backdrop-blur-md sticky top-0 z-30">
-      {/* Left: Mobile Menu + Clean Borderless Search (Exact match to Rescale Spotlight UI) */}
+      {/* Left: Mobile Menu + Search */}
       <div className="flex items-center gap-3 flex-1 max-w-xl" ref={searchRef}>
         <button
           type="button"
@@ -115,7 +129,6 @@ export function TopHeader({ onOpenMobileNav }) {
             )}
           </div>
 
-          {/* Instant Search Dropdown */}
           {searchFocused && q.length > 0 && (
             <div className="absolute left-0 right-0 mt-2 bg-white rounded-[22px] border border-[#DFE1F5] shadow-panel p-4 z-50 animate-fade-up">
               {matchedOrders.length === 0 && matchedCustomers.length === 0 ? (
@@ -127,7 +140,7 @@ export function TopHeader({ onOpenMobileNav }) {
                   {matchedOrders.length > 0 && (
                     <div>
                       <div className="text-[10.5px] font-display font-bold uppercase tracking-[0.14em] text-[#8891AA] px-2 mb-1.5">
-                        Orders
+                        Orders (Sandbox)
                       </div>
                       <div className="space-y-1">
                         {matchedOrders.map((o) => (
@@ -201,25 +214,29 @@ export function TopHeader({ onOpenMobileNav }) {
         </div>
       </div>
 
-      {/* Right: Store Pill + Primary Rescale Blue Pill CTA + Notification Bell + Profile */}
-      <div className="flex items-center gap-3 sm:gap-4">
+      {/* Right: Active PostgreSQL Workspace Pill + Primary CTA + Bell + Authenticated Operator Chip */}
+      <div className="flex items-center gap-2.5 sm:gap-3.5">
         <Link
-          to="/app/integrations"
+          to="/workspaces"
+          data-testid="active-workspace-badge"
           className="hidden xl:inline-flex items-center gap-2 px-3.5 py-2 rounded-full bg-white border border-[#E3E6FA] shadow-rescale-card text-[12px] font-display font-semibold text-[#545C9E] hover:border-[#C5CAEC] transition-colors"
+          title="Authenticated PostgreSQL Workspace (Click to switch)"
         >
           <span className="w-2 h-2 rounded-full bg-[#2EB37E]" />
-          <Store className="w-3.5 h-3.5 text-[#7584D6]" />
-          <span>{activeStoresCount} Channels Active</span>
+          <Building2 className="w-3.5 h-3.5 text-[#7584D6]" />
+          <span className="font-bold text-[#465478]">{displayWorkspace}</span>
+          <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-[#EEF2FF] text-[#545C9E]">
+            {displayRole}
+          </span>
         </Link>
 
-        {/* Exact match to "+ Create Strategy" pill button in Rescale Spotlight */}
         <Button variant="primary" size="md" onClick={handleSimulateOrder}>
           <PenSquare className="w-4 h-4" />
           <span className="hidden sm:inline">Simulate Order</span>
           <span className="sm:hidden">+ Order</span>
         </Button>
 
-        {/* Notification Bell with Warm Coral Dot (Exact match to Rescale Spotlight) */}
+        {/* Notification Bell */}
         <div className="relative" ref={bellRef}>
           <button
             type="button"
@@ -262,14 +279,12 @@ export function TopHeader({ onOpenMobileNav }) {
                       setBellOpen(false);
                       if (n.route) navigate(n.route);
                     }}
-                    className={`w-full px-5 py-3.5 text-left hover:bg-[#F9FAFB] transition-colors flex items-start gap-3 ${
-                      !n.read ? 'bg-[#F6F7FD]/70' : ''
-                    }`}
+                    className={`w-full px-5 py-3.5 text-left hover:bg-[#F9FAFB] transition-colors flex items-start gap-3 ${!n.read ? 'bg-[#F6F7FD]/70' : ''
+                      }`}
                   >
                     <span
-                      className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${
-                        !n.read ? 'bg-[#FA6E43]' : 'bg-[#D0D6EC]'
-                      }`}
+                      className={`mt-1.5 w-2 h-2 rounded-full flex-shrink-0 ${!n.read ? 'bg-[#FA6E43]' : 'bg-[#D0D6EC]'
+                        }`}
                     />
                     <div className="min-w-0 flex-1">
                       <div className="text-[12.5px] font-display font-semibold text-[#465478] leading-snug">
@@ -284,17 +299,33 @@ export function TopHeader({ onOpenMobileNav }) {
           )}
         </div>
 
-        {/* Merchant Operator Chip */}
+        {/* Authenticated User Chip */}
         <Link
           to="/app/settings"
+          data-testid="active-user-badge"
           className="hidden md:inline-flex items-center gap-2.5 pl-1.5 pr-3.5 py-1 rounded-full bg-white border border-[#E3E6FA] shadow-rescale-card hover:border-[#C5CAEC] transition-all"
         >
-          <Avatar name="Ananya Mehta" size="sm" />
+          <Avatar name={displayName} size="sm" />
           <div className="leading-tight text-left">
-            <div className="font-display text-[12px] font-bold text-[#465478]">Ananya M.</div>
-            <div className="text-[10.5px] text-[#8891AA]">Head of Ops</div>
+            <div className="font-display text-[12px] font-bold text-[#465478] truncate max-w-[120px]">
+              {displayName}
+            </div>
+            <div className="text-[10.5px] text-[#8891AA] truncate max-w-[120px]">
+              {displayWorkspace} · {displayRole}
+            </div>
           </div>
         </Link>
+
+        <button
+          type="button"
+          onClick={handleLogout}
+          data-testid="header-logout-btn"
+          title="Sign out of ORDEXA"
+          className="w-10 h-10 rounded-full bg-white border border-[#E3E6FA] shadow-rescale-card flex items-center justify-center text-[#D13B56] hover:bg-[#FFF0F2] transition-colors"
+          aria-label="Sign out"
+        >
+          <LogOut className="w-4 h-4" />
+        </button>
       </div>
     </header>
   );
