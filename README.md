@@ -5,7 +5,8 @@ ORDEXA is a multi-tenant Order Management and Return-to-Origin (RTO) Intelligenc
 The platform is built around three core layers:
 1. **Multi-Tenant Merchant Workspace & Security Foundation (Live PostgreSQL + Spring Security):** Provides transactional merchant registration, BCrypt password hashing, short-lived workspace-scoped JWT access tokens, rotated `HttpOnly` SHA-256 hashed refresh cookies with replay detection, role-based access control (`OWNER`, `ADMIN`, `MANAGER`, `OPERATOR`, `VIEWER`), and strict cross-tenant data isolation.
 2. **Database-Backed Order & Customer Management Core (Milestone 3):** Implements merchant-scoped customers (`UNIQUE (merchant_id, phone_number)`), multi-item orders (`UNIQUE (merchant_id, order_number)`), server-calculated `BigDecimal` monetary arithmetic, controlled order lifecycle state machine (`CREATED -> CONFIRMED -> PROCESSING -> SHIPPED -> DELIVERED` + `CANCELLED`), immutable status audit trail (`order_status_history`), safe deletion rules, and bulk CSV order importing with row-level validation reporting.
-3. **Explainable AI RTO Rescue Engine (Scheduled for Milestone 4+):** Evaluates pre-dispatch order risk, assigns `LOW`, `MEDIUM`, and `HIGH` attention bands with transparent reason codes, and orchestrates proportionate buyer verification.
+3. **Complete Customer Intelligence Graph & Behavioral Analytics Engine (Milestone 4):** Transforms PostgreSQL transactional records into merchant-scoped Customer 360 behavioral profiles, 7 deterministic and explainable customer segments (`NEW_CUSTOMER`, `REPEAT_CUSTOMER`, `HIGH_VALUE_CUSTOMER`, `INACTIVE_CUSTOMER`, `CANCELLATION_PRONE_CUSTOMER`, `COD_HEAVY_CUSTOMER`, `LOYAL_CUSTOMER`), product performance & co-purchase combinations, chronological purchase timelines (`customer_behavioural_events` + `order_status_history`), and an interactive `CUSTOMER`-`ORDER`-`PRODUCT`-`SEGMENT` relationship graph.
+4. **Explainable AI RTO Rescue Engine (Scheduled for Milestone 5+):** Evaluates pre-dispatch order risk, assigns `LOW`, `MEDIUM`, and `HIGH` attention bands with transparent reason codes, and orchestrates proportionate buyer verification.
 
 ---
 
@@ -55,6 +56,10 @@ Hibernate automatic DDL creation is disabled (`spring.jpa.hibernate.ddl-auto=val
   - `order_items`: `id` (UUID PK), `merchant_id` (FK), `order_id` (FK), `product_name`, `sku`, `quantity`, `unit_price` (`NUMERIC(14,2)`), `total_price` (`NUMERIC(14,2)`).
   - `order_status_history`: `id` (UUID PK), `merchant_id` (FK), `order_id` (FK), `previous_status`, `new_status`, `changed_by_user_id` (FK), `reason`, `created_at`.
 
+- **`V4__customer_intelligence.sql`:**
+  - `customer_behavioural_events`: `id` (UUID PK), `merchant_id` (FK), `customer_id` (FK), `order_id` (FK), `event_type` (`CUSTOMER_CREATED`, `CUSTOMER_PROFILE_UPDATED`, `REPEAT_PURCHASE`, `PAYMENT_COMPLETED`), `title`, `description`, `occurred_at`.
+  - Composite performance indexes on `order_items (merchant_id, sku)`, `order_items (merchant_id, order_id, sku)`, and `orders (merchant_id, customer_id, order_status, created_at DESC)`.
+
 ---
 
 ## 3. REST APIs (`/api/v1`)
@@ -90,6 +95,24 @@ Hibernate automatic DDL creation is disabled (`spring.jpa.hibernate.ddl-auto=val
 | `GET /api/v1/customers` | Workspace Role >= `VIEWER` | Lists merchant-scoped customers with search (`fullName`, `phoneNumber`, `email`), order counts, and pagination |
 | `GET /api/v1/customers/{id}` | Workspace Role >= `VIEWER` | Returns customer profile and lifetime order metrics (`orderCount`, `totalSpent`, `deliveredCount`, `cancelledCount`) |
 | `GET /api/v1/customers/{id}/orders` | Workspace Role >= `VIEWER` | Returns paginated order history for a specific customer within the active merchant workspace |
+
+### Customer Intelligence Graph APIs (Milestone 4)
+| Method & Endpoint | Access | Description |
+| :--- | :--- | :--- |
+| `GET /api/v1/intelligence/overview` | Workspace Role >= `VIEWER` | Returns merchant-scoped customer intelligence KPIs (total, new, repeat, high-value, inactive, loyal, avg CLV, AOV, repeat %, cancellation %) and segment distribution |
+| `GET /api/v1/intelligence/graph` | Workspace Role >= `VIEWER` | Generates the merchant-scoped `CUSTOMER`, `ORDER`, `PRODUCT`, and `SEGMENT` relationship graph with `PLACED`, `CONTAINS`, `BELONGS_TO`, `REPEATEDLY_PURCHASED`, and `RELATED_TO` edges |
+| `GET /api/v1/intelligence/customers` | Workspace Role >= `VIEWER` | Paginated, filterable customer intelligence directory (`search`, `segment`, `minOrders`, `maxOrders`, `minSpend`, `maxDaysSinceLastOrder`, `sortBy`, `sortDir`) |
+| `GET /api/v1/intelligence/customers/{customerId}` | Workspace Role >= `VIEWER` | Complete Customer 360 profile: purchase metrics, payment behaviour, order outcomes, explainable segments, product preferences, timeline, relationships, and subgraph |
+| `GET /api/v1/intelligence/customers/{customerId}/graph` | Workspace Role >= `VIEWER` | Dedicated single-customer relationship graph: 1 central `CUSTOMER` node, their `ORDER` nodes, consolidated `PRODUCT` nodes, and assigned `SEGMENT` nodes |
+| `GET /api/v1/intelligence/customers/{customerId}/segments` | Workspace Role >= `VIEWER` | Returns explainable behavioral segment assignments and evidence for a customer |
+| `GET /api/v1/intelligence/customers/{customerId}/timeline` | Workspace Role >= `VIEWER` | Returns chronological order lifecycle and behavioral event timeline for a customer |
+| `GET /api/v1/intelligence/customers/{customerId}/products` | Workspace Role >= `VIEWER` | Returns product preferences and repeated SKUs for a customer |
+| `GET /api/v1/intelligence/segments` | Workspace Role >= `VIEWER` | Lists all 7 deterministic behavioral segments, rules, customer counts, and spend metrics |
+| `GET /api/v1/intelligence/segments/{segmentId}` | Workspace Role >= `VIEWER` | Returns summary metrics and rule definition for a specific segment |
+| `GET /api/v1/intelligence/segments/{segmentId}/customers` | Workspace Role >= `VIEWER` | Lists paginated customers belonging to a specific behavioral segment |
+| `GET /api/v1/intelligence/products` | Workspace Role >= `VIEWER` | Lists SKU-level product intelligence (units sold, revenue, unique buyers, repeat buyer rate) |
+| `GET /api/v1/intelligence/products/{sku}` | Workspace Role >= `VIEWER` | Returns product intelligence detail, customer buyers list, and co-purchased SKUs |
+| `GET /api/v1/intelligence/products/co-purchases` | Workspace Role >= `VIEWER` | Computes explainable product co-purchase pairs with same-order count, shared customer count, and support % |
 
 ---
 

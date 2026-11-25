@@ -91,4 +91,13 @@
 - **CSV Order Import Engine (`CsvOrderImportService`):**
   - Supports multi-line rows for the same `order_number` within a CSV batch (aggregating line items into a single multi-item order).
   - Validates required headers, Indian/E.164 phone numbers, positive quantities, non-negative `BigDecimal` prices, and duplicate order numbers against existing merchant orders in PostgreSQL.
-  - Imports valid orders while returning a comprehensive `CsvImportSummaryDto` (`totalRows`, `importedOrders`, `failedRows`, `errors[]`, `importedOrderIds[]`) so failed rows are never silently discarded.
+  - Imports valid orders while returning a comprehensive `CsvImportSummaryDto` (`totalRowsProcessed`, `importedOrdersCount`, `failedRowsCount`, `errors[]`, `importedOrders[]`) so failed rows are never silently discarded.
+
+---
+
+## 4. Customer Intelligence Graph Engine (`V4__customer_intelligence.sql`)
+
+See [CUSTOMER_INTELLIGENCE_ARCHITECTURE.md](file:///c:/Users/MANIK%20MEHRA/ordexa/docs/CUSTOMER_INTELLIGENCE_ARCHITECTURE.md) for the complete reference covering:
+- `customer_behavioural_events` schema and V4 aggregation indexes.
+- Graph node types (`CUSTOMER`, `ORDER`, `PRODUCT`, `SEGMENT`) and edge types (`PLACED`, `CONTAINS`, `BELONGS_TO`, `REPEATEDLY_PURCHASED`, `RELATED_TO`).
+- `BigDecimal` behavioral analytics formulas, deterministic segmentation rules, and product co-purchase calculations.

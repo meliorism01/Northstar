@@ -38,7 +38,17 @@ com.ordexa
 │   ├── dto/ (CustomerSummaryDto, CustomerDetailDto)
 │   ├── entity/Customer.java
 │   ├── repository/CustomerRepository.java
-│   └── service/CustomerService.java
+│   ├── service/CustomerService.java
+│   └── intelligence/
+│       ├── analytics/CustomerIntelligenceCalculator.java
+│       ├── config/CustomerIntelligenceProperties.java
+│       ├── controller/CustomerIntelligenceController.java
+│       ├── dto/CustomerIntelligenceDtos.java
+│       ├── entity/ (CustomerBehaviouralEvent, CustomerBehaviouralEventType)
+│       ├── graph/ (GraphNodeType, GraphEdgeType)
+│       ├── repository/CustomerBehaviouralEventRepository.java
+│       ├── segmentation/CustomerSegmentType.java
+│       └── service/CustomerIntelligenceService.java
 ├── order/
 │   ├── controller/OrderController.java
 │   ├── dto/ (CreateOrderRequest, UpdateOrderRequest, UpdateOrderStatusRequest, OrderItemRequest, OrderItemDto, OrderStatusHistoryDto, OrderSummaryDto, OrderDetailDto, CsvImportOrdersRequest, CsvRowErrorDto, CsvImportSummaryDto)
