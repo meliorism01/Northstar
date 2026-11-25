@@ -12,6 +12,8 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -96,6 +98,27 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(
                         "Requested API endpoint was not found",
                         ErrorCode.RESOURCE_NOT_FOUND.name(),
+                        clock));
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAccessDeniedException(AccessDeniedException ex) {
+        return ResponseEntity
+                .status(HttpStatus.FORBIDDEN)
+                .body(ApiResponse.error(
+                        "You do not have permission to perform this action",
+                        ErrorCode.ACCESS_DENIED.name(),
+                        clock));
+    }
+
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<ApiResponse<Void>> handleOptimisticLockingFailure(ObjectOptimisticLockingFailureException ex) {
+        log.warn("Concurrent modification conflict detected: {}", ex.getMessage());
+        return ResponseEntity
+                .status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error(
+                        "The record was modified by another request. Please refresh and try again.",
+                        ErrorCode.CONCURRENT_MODIFICATION.name(),
                         clock));
     }
 

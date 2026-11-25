@@ -4,8 +4,8 @@ ORDEXA is a multi-tenant Order Management and Return-to-Origin (RTO) Intelligenc
 
 The platform is built around three core layers:
 1. **Multi-Tenant Merchant Workspace & Security Foundation (Live PostgreSQL + Spring Security):** Provides transactional merchant registration, BCrypt password hashing, short-lived workspace-scoped JWT access tokens, rotated `HttpOnly` SHA-256 hashed refresh cookies with replay detection, role-based access control (`OWNER`, `ADMIN`, `MANAGER`, `OPERATOR`, `VIEWER`), and strict cross-tenant data isolation.
-2. **Merchant-Scoped Customer Intelligence Graph:** Connects customers, orders, owned stores, delivery addresses, landmark history, and delivery outcomes within a single merchant's workspace without cross-merchant blacklists or unsafe automatic merges.
-3. **Explainable AI RTO Rescue Engine:** Evaluates pre-dispatch order risk, assigns `LOW`, `MEDIUM`, and `HIGH` attention bands with transparent reason codes (`ADDRESS_INCOMPLETE`, `CONFIRMATION_PENDING`, `HIGH_VALUE_ORDER`, `REPEATED_COD_REFUSAL`, `PRIOR_DELIVERY_EXCEPTION`, `NEW_CUSTOMER`), and orchestrates proportionate buyer verification.
+2. **Database-Backed Order & Customer Management Core (Milestone 3):** Implements merchant-scoped customers (`UNIQUE (merchant_id, phone_number)`), multi-item orders (`UNIQUE (merchant_id, order_number)`), server-calculated `BigDecimal` monetary arithmetic, controlled order lifecycle state machine (`CREATED -> CONFIRMED -> PROCESSING -> SHIPPED -> DELIVERED` + `CANCELLED`), immutable status audit trail (`order_status_history`), safe deletion rules, and bulk CSV order importing with row-level validation reporting.
+3. **Explainable AI RTO Rescue Engine (Scheduled for Milestone 4+):** Evaluates pre-dispatch order risk, assigns `LOW`, `MEDIUM`, and `HIGH` attention bands with transparent reason codes, and orchestrates proportionate buyer verification.
 
 ---
 
@@ -18,26 +18,26 @@ ordexa/
 ├── package.json                     # Frontend dependencies & scripts (React 18 + Vite 6 + Tailwind CSS + Zustand)
 ├── vite.config.js                   # Vite dev server (port 5173) with /api reverse proxy to Spring Boot (port 8080)
 ├── src/
-│   ├── services/api/                # apiClient.js (single-flight refresh, in-memory JWT), authApi.js, workspaceApi.js
+│   ├── services/api/                # apiClient.js, authApi.js, workspaceApi.js, ordersApi.js, customersApi.js
 │   ├── store/useAuthStore.js        # Dedicated multi-tenant authentication & workspace state store
-│   ├── store/useOrdexaStore.js      # Operational order, customer graph, NDR & sandbox store
+│   ├── store/useOrdexaStore.js      # Operational demo sandbox store (Rescue, NDR, Analytics & Financial sandboxes)
 │   ├── components/auth/             # ProtectedRoute.jsx (session restoration, workspace guard & RBAC check)
 │   ├── pages/auth/                  # RegisterPage.jsx, LoginPage.jsx, WorkspaceSelectPage.jsx
-│   └── pages/                       # LandingPage + 9 Merchant Console Modules (Dashboard, Orders, Graph, Rescue, NDR, Analytics, Financial, Integrations, Settings)
+│   └── pages/                       # LandingPage + 9 Merchant Console Modules (Orders, Customers & Dashboard connected to PostgreSQL)
 ├── server/                          # Spring Boot 3.4.3 Modular Monolith Backend
 │   ├── pom.xml                      # Maven configuration (Spring Boot 3.4.3, Spring Security, JJWT 0.12.6, Flyway, PostgreSQL)
 │   ├── mvnw / mvnw.cmd              # Maven Wrapper scripts (Maven 3.9.9)
 │   ├── Dockerfile                   # Multi-stage Java 21 LTS container build
-│   ├── src/main/java/com/ordexa/    # Modular packages: auth, merchant, user, membership, tenant, config, common, health
-│   ├── src/main/resources/          # Profile YAML configs & Flyway SQL migrations (V1 + V2)
+│   ├── src/main/java/com/ordexa/    # Modular packages: auth, merchant, user, membership, tenant, customer, order, config, common, health
+│   ├── src/main/resources/          # Profile YAML configs & Flyway SQL migrations (V1, V2, V3)
 │   └── src/test/java/com/ordexa/    # Unit, MockMvc integration, live PostgreSQL & Testcontainers test suites
 └── docs/
-    └── BACKEND_ARCHITECTURE.md      # Architecture reference: JWT lifecycle, refresh rotation, RBAC & tenant isolation
+    └── BACKEND_ARCHITECTURE.md      # Architecture reference: JWT lifecycle, RBAC, Order Lifecycle, CSV import & tenant isolation
 ```
 
 ---
 
-## 2. Database Schema (Flyway Migrations V1 & V2)
+## 2. Database Schema (Flyway Migrations V1, V2 & V3)
 
 Hibernate automatic DDL creation is disabled (`spring.jpa.hibernate.ddl-auto=validate`). All schema changes are managed strictly by Flyway:
 - **`V1__init_foundation_metadata.sql`:**
@@ -49,11 +49,17 @@ Hibernate automatic DDL creation is disabled (`spring.jpa.hibernate.ddl-auto=val
   - `authentication_sessions`: `id` (UUID PK), `user_id` (FK), `active_merchant_id` (FK), `status` (`ACTIVE`, `REVOKED`, `EXPIRED`), `ip_address`, `user_agent`, `expires_at`, `revoked_at`.
   - `refresh_tokens`: `id` (UUID PK), `user_id` (FK), `token_hash` (UNIQUE SHA-256 hex digest—never plaintext), `session_id` (FK), `expires_at`, `revoked_at`, `replaced_by_token_id` (FK).
   - `audit_logs`: `id` (UUID PK), `merchant_id` (FK), `actor_user_id` (FK), `action`, `target_type`, `target_id`, `details`, `ip_address`, `created_at`.
+- **`V3__init_customers_orders_and_history.sql`:**
+  - `customers`: `id` (UUID PK), `merchant_id` (FK), `full_name`, `phone_number`, `email`, `default_shipping_address`, `city`, `state`, `postal_code`, `country`, `created_at`, `updated_at`, `UNIQUE (merchant_id, phone_number)`.
+  - `orders`: `id` (UUID PK), `merchant_id` (FK), `order_number`, `customer_id` (FK), `source` (`MANUAL`, `SHOPIFY`, `WOOCOMMERCE`, `CSV`), `order_status` (`CREATED`, `CONFIRMED`, `PROCESSING`, `SHIPPED`, `DELIVERED`, `CANCELLED`), `payment_status` (`PENDING`, `PAID`, `PARTIALLY_PAID`, `REFUNDED`, `FAILED`), `payment_method` (`COD`, `PREPAID`, `UPI`, `CARD`, `NETBANKING`, `WALLET`), `subtotal` (`NUMERIC(14,2)`), `discount` (`NUMERIC(14,2)`), `shipping_fee` (`NUMERIC(14,2)`), `total_amount` (`NUMERIC(14,2)`), `currency`, `shipping_address`, `billing_address`, `customer_notes`, `version` (`BIGINT` optimistic lock), `created_at`, `updated_at`, `UNIQUE (merchant_id, order_number)`.
+  - `order_items`: `id` (UUID PK), `merchant_id` (FK), `order_id` (FK), `product_name`, `sku`, `quantity`, `unit_price` (`NUMERIC(14,2)`), `total_price` (`NUMERIC(14,2)`).
+  - `order_status_history`: `id` (UUID PK), `merchant_id` (FK), `order_id` (FK), `previous_status`, `new_status`, `changed_by_user_id` (FK), `reason`, `created_at`.
 
 ---
 
-## 3. Authentication, Workspace & Multi-Tenant APIs
+## 3. REST APIs (`/api/v1`)
 
+### Authentication & Workspace APIs
 | Method & Endpoint | Access | Description |
 | :--- | :--- | :--- |
 | `GET /api/v1/health` | Public | Live JDBC probe returning `200 OK` (`UP` / `CONNECTED`) or `503` (`DOWN` / `DISCONNECTED`) |
@@ -70,25 +76,49 @@ Hibernate automatic DDL creation is disabled (`spring.jpa.hibernate.ddl-auto=val
 | `GET /api/v1/merchants/{merchantId}/members` | Workspace Role >= `VIEWER` | Lists team members for the active merchant workspace |
 | `POST /api/v1/merchants/{merchantId}/members` | Workspace Role >= `ADMIN` | Adds or invites a user to the active merchant workspace with a specified role |
 
+### Order & Customer Management APIs (Milestone 3)
+| Method & Endpoint | Access | Description |
+| :--- | :--- | :--- |
+| `GET /api/v1/orders` | Workspace Role >= `VIEWER` | Lists workspace orders with search (`orderNumber`, `customerName`, `phone`), status/payment/date filters, pagination, and sorting |
+| `GET /api/v1/orders/{id}` | Workspace Role >= `VIEWER` | Returns full order details, line items, customer summary, allowed status transitions, and `order_status_history` timeline |
+| `POST /api/v1/orders` | Workspace Role >= `OPERATOR` | Creates a new order with server-calculated `BigDecimal` totals, automatic merchant-scoped customer lookup/creation, and initial status history entry |
+| `PATCH /api/v1/orders/{id}` | Workspace Role >= `OPERATOR` | Updates order payment status/method, addresses, notes, discount, or shipping fee and recalculates `totalAmount` |
+| `POST /api/v1/orders/{id}/status` | Workspace Role >= `OPERATOR` | Transitions order status along the controlled lifecycle state machine and appends an immutable `OrderStatusHistory` record |
+| `DELETE /api/v1/orders/{id}` | Workspace Role >= `MANAGER` | Safely deletes an order only if its current status is `CREATED` or `CANCELLED` (rejects `CONFIRMED`, `PROCESSING`, `SHIPPED`, `DELIVERED` with `422 ORDER_DELETION_NOT_ALLOWED`) |
+| `POST /api/v1/orders/import-csv` | Workspace Role >= `OPERATOR` | Parses CSV text payload, validates required columns, phone numbers, monetary values, and duplicate order numbers, imports valid orders, and returns `CsvImportSummaryDto` |
+| `POST /api/v1/orders/import-csv/file` | Workspace Role >= `OPERATOR` | Multipart file upload variant for bulk CSV order import |
+| `GET /api/v1/customers` | Workspace Role >= `VIEWER` | Lists merchant-scoped customers with search (`fullName`, `phoneNumber`, `email`), order counts, and pagination |
+| `GET /api/v1/customers/{id}` | Workspace Role >= `VIEWER` | Returns customer profile and lifetime order metrics (`orderCount`, `totalSpent`, `deliveredCount`, `cancelledCount`) |
+| `GET /api/v1/customers/{id}/orders` | Workspace Role >= `VIEWER` | Returns paginated order history for a specific customer within the active merchant workspace |
+
 ---
 
-## 4. Role-Based Access Control (RBAC) Matrix
+## 4. Controlled Order Lifecycle & CSV Import Format
 
-| Role | Rank | Granted Capabilities |
-| :--- | :---: | :--- |
-| `OWNER` | 5 | Full workspace control, rename workspace, manage all roles including `OWNER` and `ADMIN` |
-| `ADMIN` | 4 | Administrative & team membership management (`ADMIN`, `MANAGER`, `OPERATOR`, `VIEWER`), operational workflows |
-| `MANAGER` | 3 | Manage operational workflows, scoring rules, and exception queues |
-| `OPERATOR` | 2 | Execute assigned order verification and NDR recovery tasks |
-| `VIEWER` | 1 | Read-only access to workspace dashboards, members, and analytics |
+### Order Lifecycle State Machine
+- **Valid Transitions:**
+  - `CREATED` -> `CONFIRMED`, `CANCELLED`
+  - `CONFIRMED` -> `PROCESSING`, `CANCELLED`
+  - `PROCESSING` -> `SHIPPED`, `CANCELLED`
+  - `SHIPPED` -> `DELIVERED`
+  - `DELIVERED` -> *(terminal state)*
+  - `CANCELLED` -> *(terminal state)*
+- Any other transition (e.g., `CREATED -> DELIVERED` or `DELIVERED -> CANCELLED`) is rejected with `422 Unprocessable Entity` (`INVALID_STATUS_TRANSITION`).
+- **Safe Deletion Policy:** Only orders in `CREATED` or `CANCELLED` status can be deleted (`DELETE /api/v1/orders/{id}`, requires `MANAGER`, `ADMIN`, or `OWNER`). Orders that have progressed to `CONFIRMED`, `PROCESSING`, `SHIPPED`, or `DELIVERED` must be preserved for financial and operational audit integrity.
+
+### CSV Order Import Columns
+Required CSV header columns (case-insensitive):
+`customer_name,customer_phone,product_name,sku,quantity,unit_price,payment_method,shipping_address`
+Optional columns:
+`order_number,customer_email,payment_status,discount,shipping_fee,billing_address,customer_notes,city,state,postal_code,country,currency`
 
 ---
 
 ## 5. Running the Full Stack Locally
 
-### Option A — Local PostgreSQL Cluster (Port 5433) or Docker Compose (Port 5432)
+### Step 1 — PostgreSQL (Local Port 5433 or Docker Port 5432)
 ```powershell
-# Start PostgreSQL via Docker Compose (if using Docker Desktop):
+# If using Docker Compose:
 docker compose up -d postgres
 ```
 *(On Windows workstations with PostgreSQL 18 installed locally, the local cluster runs on `127.0.0.1:5433` with database `ordexa_db` and user `ordexa_app`, which is pre-configured as the default in `application-local.yml`.)*
@@ -96,19 +126,15 @@ docker compose up -d postgres
 ### Step 2 — Run Backend Tests & Start Spring Boot Server
 ```powershell
 cd server
-.\mvnw.cmd clean verify
+.\mvnw.cmd test -B
 .\mvnw.cmd spring-boot:run
 ```
 - Backend API: `http://127.0.0.1:8080/api/v1/health`
 - Swagger UI: `http://127.0.0.1:8080/swagger-ui.html`
 
 ### Step 3 — Start React Frontend
-In a second terminal from the repository root:
 ```powershell
 npm run dev
 ```
 - Public Landing Page: `http://127.0.0.1:5173/`
-- Merchant Registration: `http://127.0.0.1:5173/register`
-- Merchant Sign In: `http://127.0.0.1:5173/login`
-- Workspace Picker: `http://127.0.0.1:5173/workspaces`
-- Protected Merchant Console: `http://127.0.0.1:5173/app/dashboard`
+- Protected Merchant Console: `http://127.0.0.1:5173/app/orders`

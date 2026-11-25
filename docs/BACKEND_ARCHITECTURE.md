@@ -1,4 +1,4 @@
-# ORDEXA — Backend Architecture & Multi-Tenant Security Reference
+# ORDEXA — Backend Architecture, Multi-Tenant Security & Order Management Reference
 
 ## 1. End-to-End Authentication & Workspace Lifecycle
 
@@ -24,60 +24,71 @@
          |       {merchantId}                                |-- Update session.active_merchant_id ->|
          |<-- 200 OK (Workspace-Scoped JWT with mid & role) -|                                       |
          |                                                   |                                       |
-         |--- 4. GET/PATCH /api/v1/merchants/{merchantId} -->|                                       |
-         |       Authorization: Bearer <scoped-jwt>          |-- JwtAuthenticationFilter checks      |
-         |                                                   |   session=ACTIVE & membership=ACTIVE  |
-         |                                                   |-- @PreAuthorize("@tenantAuth...")     |
-         |                                                   |   verifies tenant match & role rank ->|
-         |<-- 200 OK (or 403 TENANT_ACCESS_DENIED) ----------|                                       |
+         |--- 4. POST /api/v1/orders ----------------------->|                                       |
+         |       Authorization: Bearer <scoped-jwt>          |-- JwtAuthenticationFilter resolves    |
+         |                                                   |   TenantContext (merchantId + role)   |
+         |                                                   |-- Upsert merchant-scoped Customer --->|
+         |                                                   |-- Compute BigDecimal totals --------->|
+         |                                                   |-- INSERT orders, order_items,         |
+         |                                                   |   order_status_history -------------->|
+         |<-- 201 Created (OrderDetailDto) ------------------|                                       |
 ```
 
 ---
 
-## 2. Database Schema & Constraints (`V2__init_merchants_users_and_memberships.sql`)
+## 2. Database Schema & Constraints (`V1`, `V2`, `V3`)
 
-### Tables Created in V2
-1. **`merchants`**:
+### Tables Created in V2 (`V2__init_merchants_users_and_memberships.sql`)
+1. **`merchants`**: `id UUID PK`, `uq_merchants_business_slug UNIQUE (business_slug)`, `status IN ('ACTIVE', 'SUSPENDED', 'ARCHIVED')`.
+2. **`users`**: `id UUID PK`, `uq_users_email UNIQUE (email)` (lowercase), `password_hash` (BCrypt), `status IN ('ACTIVE', 'INACTIVE', 'LOCKED')`.
+3. **`merchant_memberships`**: `id UUID PK`, `uq_memberships_merchant_user UNIQUE (merchant_id, user_id)`, `role IN ('OWNER', 'ADMIN', 'MANAGER', 'OPERATOR', 'VIEWER')`.
+4. **`authentication_sessions`**: Tracks active login sessions (`ACTIVE`, `REVOKED`, `EXPIRED`) and `active_merchant_id`.
+5. **`refresh_tokens`**: Stores only SHA-256 hex digests (`token_hash`) and rotation lineage (`replaced_by_token_id`).
+6. **`audit_logs`**: Immutable security and operational audit log.
+
+### Tables Created in V3 (`V3__init_customers_orders_and_history.sql`)
+1. **`customers`**:
    - Primary Key: `id UUID`
-   - Unique Constraint: `uq_merchants_business_slug UNIQUE (business_slug)`
-   - Status Check: `chk_merchants_status CHECK (status IN ('ACTIVE', 'SUSPENDED', 'ARCHIVED'))`
-2. **`users`**:
+   - Tenant Scope: `merchant_id UUID NOT NULL REFERENCES merchants(id) ON DELETE CASCADE`
+   - Unique Constraint: `uq_customers_merchant_phone UNIQUE (merchant_id, phone_number)` (never globally unique across merchants)
+   - Indexes: `(merchant_id, created_at DESC)`, `(merchant_id, lower(full_name))`, `(merchant_id, phone_number)`
+2. **`orders`**:
    - Primary Key: `id UUID`
-   - Unique Constraint: `uq_users_email UNIQUE (email)` (normalized lowercase)
-   - Status Check: `chk_users_status CHECK (status IN ('ACTIVE', 'INACTIVE', 'LOCKED'))`
-3. **`merchant_memberships`**:
+   - Tenant Scope: `merchant_id UUID NOT NULL REFERENCES merchants(id) ON DELETE CASCADE`
+   - Customer Reference: `customer_id UUID NOT NULL REFERENCES customers(id) ON DELETE RESTRICT`
+   - Unique Constraint: `uq_orders_merchant_order_number UNIQUE (merchant_id, order_number)`
+   - Monetary Columns: `subtotal NUMERIC(14,2)`, `discount NUMERIC(14,2)`, `shipping_fee NUMERIC(14,2)`, `total_amount NUMERIC(14,2)` with non-negative check constraints
+   - Concurrency Control: `version BIGINT NOT NULL DEFAULT 0` (`@Version` optimistic locking)
+   - Indexes: `(merchant_id, created_at DESC)`, `(merchant_id, order_status, created_at DESC)`, `(merchant_id, payment_status, created_at DESC)`, `(merchant_id, customer_id, created_at DESC)`
+3. **`order_items`**:
    - Primary Key: `id UUID`
-   - Foreign Keys: `merchant_id REFERENCES merchants(id) ON DELETE CASCADE`, `user_id REFERENCES users(id) ON DELETE CASCADE`
-   - Unique Constraint: `uq_memberships_merchant_user UNIQUE (merchant_id, user_id)`
-   - Role Check: `chk_memberships_role CHECK (role IN ('OWNER', 'ADMIN', 'MANAGER', 'OPERATOR', 'VIEWER'))`
-4. **`authentication_sessions`**:
+   - Foreign Keys: `merchant_id REFERENCES merchants(id) ON DELETE CASCADE`, `order_id REFERENCES orders(id) ON DELETE CASCADE`
+   - Monetary Columns: `unit_price NUMERIC(14,2)`, `total_price NUMERIC(14,2)`
+4. **`order_status_history`**:
    - Primary Key: `id UUID`
-   - Foreign Keys: `user_id REFERENCES users(id) ON DELETE CASCADE`, `active_merchant_id REFERENCES merchants(id) ON DELETE SET NULL`
-   - Tracks session status (`ACTIVE`, `REVOKED`, `EXPIRED`), client IP, user agent, and expiration.
-5. **`refresh_tokens`**:
-   - Primary Key: `id UUID`
-   - Unique Constraint: `uq_refresh_tokens_token_hash UNIQUE (token_hash)` (64-char SHA-256 hex digest)
-   - Rotation Lineage: `replaced_by_token_id REFERENCES refresh_tokens(id) ON DELETE SET NULL`
-6. **`audit_logs`**:
-   - Primary Key: `id UUID`
-   - Immutable security trail for `MERCHANT_REGISTERED`, `USER_LOGIN`, `WORKSPACE_SELECTED`, `MERCHANT_UPDATED`, `MEMBER_ADDED`, `CROSS_TENANT_ACCESS_BLOCKED`, `REFRESH_TOKEN_REPLAY_DETECTED`, and `USER_LOGOUT`.
+   - Foreign Keys: `merchant_id REFERENCES merchants(id) ON DELETE CASCADE`, `order_id REFERENCES orders(id) ON DELETE CASCADE`, `changed_by_user_id REFERENCES users(id) ON DELETE SET NULL`
+   - Audit Fields: `previous_status`, `new_status`, `reason`, `created_at`
 
 ---
 
-## 3. Token Storage, CSRF & Session Revocation Strategy
+## 3. Order Lifecycle & Safe Deletion Architecture
 
-- **In-Memory Access Tokens:** The React frontend (`src/services/api/apiClient.js`) stores the JWT access token strictly in a module-private JavaScript variable (`inMemoryAccessToken`) and never writes it to `localStorage` or `sessionStorage`.
-- **HttpOnly Refresh Cookie:** The refresh token is stored in an `HttpOnly` cookie (`ordexa_refresh_token`) scoped to `Path=/api/v1/auth` with `SameSite=Lax` (or `Strict` in production) and `Secure=true` in production.
-- **CSRF Origin Enforcement:** `AuthController.verifyCookieCsrfOrigin` validates the `Origin` header on cookie-authenticated endpoints (`/api/v1/auth/refresh` and `/api/v1/auth/logout`) against the configured `ordexa.cors.allowed-origins` list, rejecting cross-site requests with `403 CSRF_PROTECTION_FAILED`.
-- **Single-Flight Refresh Queue:** When an access token expires or the user reloads the browser tab, `ProtectedRoute` and `apiClient.js` execute a single shared `refreshAccessTokenSingleFlight()` call so concurrent API calls never race or trigger false replay alarms.
-- **Immediate Session Revocation:** Because `JwtAuthenticationFilter` checks `AuthenticationSession.status == ACTIVE` against PostgreSQL, logging out or triggering refresh replay invalidates existing JWT access tokens immediately without waiting for the 15-minute JWT TTL to elapse.
+```text
+   +---------+       +-----------+       +------------+       +---------+       +-----------+
+   | CREATED | ----> | CONFIRMED | ----> | PROCESSING | ----> | SHIPPED | ----> | DELIVERED |
+   +---------+       +-----------+       +------------+       +---------+       +-----------+
+        |                  |                   |
+        +------------------+-------------------+
+                           |
+                           v
+                     +-----------+
+                     | CANCELLED |
+                     +-----------+
+```
 
----
-
-## 4. Current Scope & Remaining Milestones
-
-- **Implemented & Verified in Milestone 2:**
-  - Full PostgreSQL persistence for merchants, users, memberships, sessions, rotated refresh tokens, and audit logs.
-  - End-to-end React registration, login, session restoration, multi-workspace switching, RBAC enforcement, logout, and cross-tenant isolation.
-- **Scheduled for Milestone 3+:**
-  - Persisting storefronts, orders, customer intelligence graph nodes/edges, risk assessments, and interventions in PostgreSQL (`V3__...`, `V4__...`) to replace the remaining in-browser operational order sandbox (`useOrdexaStore.js`).
+- **State Enforcement:** `OrderStatus.canTransitionTo(OrderStatus target)` defines the exact allowed transitions. Invalid transitions return `422 Unprocessable Entity` (`errorCode: "INVALID_STATUS_TRANSITION"`).
+- **Safe Deletion Policy:** `DELETE /api/v1/orders/{id}` is restricted to `MANAGER`, `ADMIN`, and `OWNER` roles and is only permitted when `order.getOrderStatus().isDeletable()` is `true` (`CREATED` or `CANCELLED`). Attempting to delete an order in `CONFIRMED`, `PROCESSING`, `SHIPPED`, or `DELIVERED` status returns `422 Unprocessable Entity` (`errorCode: "ORDER_DELETION_NOT_ALLOWED"`).
+- **CSV Order Import Engine (`CsvOrderImportService`):**
+  - Supports multi-line rows for the same `order_number` within a CSV batch (aggregating line items into a single multi-item order).
+  - Validates required headers, Indian/E.164 phone numbers, positive quantities, non-negative `BigDecimal` prices, and duplicate order numbers against existing merchant orders in PostgreSQL.
+  - Imports valid orders while returning a comprehensive `CsvImportSummaryDto` (`totalRows`, `importedOrders`, `failedRows`, `errors[]`, `importedOrderIds[]`) so failed rows are never silently discarded.

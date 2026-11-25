@@ -1,6 +1,6 @@
-# ORDEXA Backend Server (`ordexa-server`) — Milestone 2
+# ORDEXA Backend Server (`ordexa-server`) — Milestones 2 & 3
 
-Production-grade Spring Boot 3.4.3 modular monolith implementing multi-tenant authentication, merchant workspaces, role-based access control (RBAC), rotated refresh tokens, and PostgreSQL persistence.
+Production-grade Spring Boot 3.4.3 modular monolith implementing multi-tenant authentication, merchant workspaces, role-based access control (RBAC), rotated refresh tokens, database-backed Order & Customer Management, controlled order lifecycle transitions, CSV order importing, and PostgreSQL persistence.
 
 ---
 
@@ -33,6 +33,18 @@ com.ordexa
 │   ├── entity/ (MerchantMembership, MerchantRole, MembershipStatus)
 │   ├── repository/MerchantMembershipRepository.java
 │   └── service/MembershipService.java
+├── customer/
+│   ├── controller/CustomerController.java
+│   ├── dto/ (CustomerSummaryDto, CustomerDetailDto)
+│   ├── entity/Customer.java
+│   ├── repository/CustomerRepository.java
+│   └── service/CustomerService.java
+├── order/
+│   ├── controller/OrderController.java
+│   ├── dto/ (CreateOrderRequest, UpdateOrderRequest, UpdateOrderStatusRequest, OrderItemRequest, OrderItemDto, OrderStatusHistoryDto, OrderSummaryDto, OrderDetailDto, CsvImportOrdersRequest, CsvRowErrorDto, CsvImportSummaryDto)
+│   ├── entity/ (Order, OrderItem, OrderStatusHistory, OrderSource, OrderStatus, PaymentStatus, PaymentMethod)
+│   ├── repository/ (OrderRepository, OrderItemRepository, OrderStatusHistoryRepository)
+│   └── service/ (OrderService, CsvOrderImportService)
 ├── tenant/
 │   ├── context/ (TenantContext, TenantContextHolder)
 │   ├── filter/JwtAuthenticationFilter.java
@@ -44,23 +56,22 @@ com.ordexa
 
 ---
 
-## 2. Security & Multi-Tenant Enforcement
+## 2. Security, Multi-Tenant Enforcement & Order Management Rules
 
-1. **Password Security:**
-   - Passwords are validated against `PasswordPolicyValidator` (8–128 chars, uppercase, lowercase, digit, special symbol) and hashed using `BCryptPasswordEncoder(10)`. Plaintext passwords are never stored or logged.
-2. **Short-Lived JWT Access Tokens + Database Session Verification:**
-   - Signed with HMAC-SHA256 (`JJWT 0.12.6`) using a minimum 256-bit key (`JWT_SECRET`).
-   - Default TTL: `900` seconds (15 minutes).
-   - Every authenticated request in `JwtAuthenticationFilter` verifies the JWT signature, issuer, expiration, token type (`ACCESS`), AND checks that the referenced `AuthenticationSession` (`sid`) is still `ACTIVE` in PostgreSQL. As a result, **logging out or triggering refresh replay immediately invalidates in-flight access tokens**.
-3. **Refresh-Token Rotation & Replay Detection:**
-   - Raw 256-bit cryptographically random refresh tokens are sent to the browser via an `HttpOnly` cookie (`ordexa_refresh_token`, path `/api/v1/auth`).
-   - Only the SHA-256 hex digest (`token_hash`) is persisted in `refresh_tokens`.
-   - Calling `POST /api/v1/auth/refresh` revokes the used token (`replaced_by_token_id`) and issues a new token.
-   - If a previously rotated refresh token is ever presented again, `AuthenticationService` detects the replay, immediately revokes the entire `AuthenticationSession` and all tokens in that session family, writes a `REFRESH_TOKEN_REPLAY_DETECTED` entry to `audit_logs`, and returns `401 REFRESH_TOKEN_REPLAY`.
-4. **Multi-Tenant Isolation (`TenantContextHolder` & `TenantAuthorizationService`):**
-   - `TenantContext` is resolved exclusively from the verified JWT + live PostgreSQL `MerchantMembership` lookup—never from client headers or request body merchant IDs alone.
-   - `TenantContextHolder.requireMerchantMatch(merchantId)` and `@PreAuthorize("@tenantAuth.hasAccessToMerchant(#merchantId, '...')")` reject any attempt by Tenant A to read or mutate Tenant B's resources with `403 TENANT_ACCESS_DENIED` and log `CROSS_TENANT_ACCESS_BLOCKED`.
-   - `TenantContextHolder.clear()` runs in a `finally` block on every HTTP request so pooled threads never retain tenant state.
+1. **Strict Tenant Scoping (`TenantContextHolder`):**
+   - Every query in `OrderRepository`, `CustomerRepository`, `OrderItemRepository`, and `OrderStatusHistoryRepository` requires `merchantId` derived from `TenantContextHolder.requireActiveWorkspace()`.
+   - `merchant_id` is never accepted from request bodies or query parameters for order/customer operations.
+   - Cross-tenant order or customer ID access returns `404 RESOURCE_NOT_FOUND` without leaking resource existence across merchants.
+2. **Merchant-Scoped Customer Identity:**
+   - Customers are uniquely keyed per merchant by `(merchant_id, phone_number)` via `CustomerService.normalizePhoneNumber(...)`.
+   - Two different merchants can independently store a customer with the same phone number (`+919876543210`) without any cross-merchant collision or data sharing.
+3. **Server-Side `BigDecimal` Monetary Arithmetic:**
+   - All monetary values (`unitPrice`, `totalPrice`, `subtotal`, `discount`, `shippingFee`, `totalAmount`) use `BigDecimal` (`NUMERIC(14,2)`) with `RoundingMode.HALF_UP`.
+   - Client-submitted totals are never trusted; `OrderService` computes line item totals and `totalAmount = subtotal - discount + shippingFee` on the server and rejects negative totals (`discount > subtotal + shippingFee`).
+4. **Controlled Order Lifecycle & Optimistic Locking:**
+   - `OrderStatus.canTransitionTo(target)` enforces `CREATED -> CONFIRMED -> PROCESSING -> SHIPPED -> DELIVERED` and cancellation from `CREATED`, `CONFIRMED`, or `PROCESSING`.
+   - `Order` includes `@Version Long version` (`BIGINT`) so concurrent status transitions produce `409 CONCURRENT_MODIFICATION` rather than corrupting state.
+   - Every creation and transition appends an immutable row to `order_status_history` with `previous_status`, `new_status`, `changed_by_user_id`, `reason`, and `created_at`.
 
 ---
 
@@ -68,7 +79,7 @@ com.ordexa
 
 ```powershell
 # Run full compilation, unit tests, MockMvc integration tests, and live PostgreSQL verification
-.\mvnw.cmd clean verify
+.\mvnw.cmd test -B
 
 # Start Spring Boot backend on port 8080
 .\mvnw.cmd spring-boot:run
