@@ -45,7 +45,7 @@ class OrdexaFoundationIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(header().string("X-Correlation-Id", "test-corr-101"))
                 .andExpect(jsonPath("$.status").value("UP"))
-                .andExpect(jsonPath("$.application").value("ORDEXA"))
+                .andExpect(jsonPath("$.application").value("NORTHSTAR"))
                 .andExpect(jsonPath("$.database").value("CONNECTED"));
     }
 
@@ -57,7 +57,7 @@ class OrdexaFoundationIntegrationTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.message").value("System is healthy"))
                 .andExpect(jsonPath("$.data.status").value("UP"))
-                .andExpect(jsonPath("$.data.application").value("ORDEXA"))
+                .andExpect(jsonPath("$.data.application").value("NORTHSTAR"))
                 .andExpect(jsonPath("$.data.database").value("CONNECTED"))
                 .andExpect(jsonPath("$.timestamp").exists());
     }
@@ -83,7 +83,7 @@ class OrdexaFoundationIntegrationTest {
     void openApiSpecificationIsGeneratedInDevAndTestProfiles() throws Exception {
         mockMvc.perform(get("/v3/api-docs"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.info.title").value("ORDEXA API"))
+                .andExpect(jsonPath("$.info.title").value("NORTHSTAR API"))
                 .andExpect(jsonPath("$.info.version").value("v1"));
     }
 }

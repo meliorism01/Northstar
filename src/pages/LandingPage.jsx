@@ -244,7 +244,7 @@ export function LandingPage() {
               v1.0
             </span>
             <span className="font-display text-[11.5px] font-bold uppercase tracking-[0.12em] text-[#545C9E]">
-              Merchant-Scoped D2C Order &amp; RTO Intelligence
+              Navigate Commerce with Clarity. · D2C Order &amp; RTO Intelligence
             </span>
           </div>
 
@@ -526,7 +526,7 @@ export function LandingPage() {
               <span className="rescale-gradient-text">compromising</span> buyer privacy.
             </h2>
             <p className="mt-4 text-[14.5px] text-[#6A7594] leading-relaxed">
-              ORDEXA clearly distinguishes live local features from simulated sandbox connectors and planned production APIs—so technical evaluators know exactly what runs today.
+              NORTHSTAR clearly distinguishes live local features from simulated sandbox connectors and planned production APIs—so technical evaluators know exactly what runs today.
             </p>
 
             <div className="mt-6 flex flex-wrap items-center justify-center lg:justify-start gap-3">
@@ -563,7 +563,7 @@ export function LandingPage() {
               <div className="rescale-dotted absolute inset-0 opacity-40 pointer-events-none" />
               <img
                 src="/template-assets/ai-sphere.png"
-                alt="ORDEXA Order Intelligence Core"
+                alt="NORTHSTAR Order Intelligence Core"
                 className="w-36 h-36 object-contain drop-shadow-md relative z-10"
               />
               <h3 className="mt-4 font-display text-[18px] font-bold text-[#465478] relative z-10">
@@ -681,7 +681,7 @@ export function LandingPage() {
             <SectionEyebrow>Ready to Explore</SectionEyebrow>
             <h2 className="mt-4 font-display text-[32px] sm:text-[44px] font-extrabold text-[#465478] tracking-[-0.035em] leading-[1.1]">
               Experience the full{' '}
-              <span className="rescale-gradient-text">ORDEXA Console</span> now.
+              <span className="rescale-gradient-text">NORTHSTAR Console</span> now.
             </h2>
             <p className="mt-3 text-[15px] text-[#6A7594]">
               Inspect all 9 operational modules—Dashboard, Order Queue, Customer Intelligence Graph, WhatsApp Rescue Sandbox, NDR Recovery, Analytics, Financial Ledger, Integrations, and Settings.
@@ -708,7 +708,7 @@ export function LandingPage() {
           <div className="md:col-span-5">
             <OrdexaWordmark size="md" />
             <p className="mt-3 text-[13px] text-[#6E7896] max-w-sm leading-relaxed">
-              Explainable pre-dispatch RTO prevention, merchant-scoped buyer intelligence, and NDR recovery built for modern D2C commerce.
+              Navigate Commerce with Clarity. Explainable pre-dispatch RTO prevention, merchant-scoped buyer intelligence, and NDR recovery built for modern D2C commerce.
             </p>
           </div>
 
@@ -746,7 +746,7 @@ export function LandingPage() {
         </div>
 
         <div className="max-w-[1220px] mx-auto pt-6 flex flex-wrap items-center justify-between gap-3 text-[12px] text-[#8891AA]">
-          <span>© {new Date().getFullYear()} ORDEXA Order Intelligence. Merchant-Scoped Demo Suite.</span>
+          <span>© {new Date().getFullYear()} NORTHSTAR — Navigate Commerce with Clarity. Merchant-Scoped Demo Suite.</span>
           <span>Rules-Based Scoring v1.0 · Privacy-First Architecture</span>
         </div>
       </footer>

@@ -138,7 +138,7 @@ export function RegisterPage() {
           <div className="text-center mb-6">
             <SectionEyebrow>Multi-Tenant Merchant Onboarding</SectionEyebrow>
             <h1 className="mt-3 font-display text-[26px] sm:text-[30px] font-extrabold text-[#465478] tracking-[-0.03em]">
-              Create your <span className="rescale-gradient-text">ORDEXA</span> workspace
+              Create your <span className="rescale-gradient-text">NORTHSTAR</span> workspace
             </h1>
             <p className="mt-1.5 text-[13px] text-[#6E7896]">
               Provisions an isolated PostgreSQL merchant tenant and owner account.

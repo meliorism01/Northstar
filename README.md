@@ -1,6 +1,6 @@
-# ORDEXA — AI-Powered Order Management & RTO Intelligence Platform
+# NORTHSTAR — Navigate Commerce with Clarity.
 
-ORDEXA is a multi-tenant Order Management and Return-to-Origin (RTO) Intelligence SaaS platform engineered for Indian D2C brands, e-commerce storefronts, and social-commerce merchants.
+NORTHSTAR is a multi-tenant Order Management, Customer Intelligence, and Return-to-Origin (RTO) Intelligence SaaS platform engineered for Indian D2C brands, e-commerce storefronts, and social-commerce merchants.
 
 The platform is built around three core layers:
 1. **Multi-Tenant Merchant Workspace & Security Foundation (Live PostgreSQL + Spring Security):** Provides transactional merchant registration, BCrypt password hashing, short-lived workspace-scoped JWT access tokens, rotated `HttpOnly` SHA-256 hashed refresh cookies with replay detection, role-based access control (`OWNER`, `ADMIN`, `MANAGER`, `OPERATOR`, `VIEWER`), and strict cross-tenant data isolation.
@@ -166,7 +166,7 @@ npm run dev
 
 ## 6. Database Configuration (Local vs. Supabase Cloud)
 
-ORDEXA supports both **Local PostgreSQL** and **Supabase Cloud PostgreSQL** (Shared Pooler — Session Mode with `sslmode=require`) via Spring Boot profiles and environment variables—no code changes required:
+NORTHSTAR supports both **Local PostgreSQL** and **Supabase Cloud PostgreSQL** (Shared Pooler — Session Mode with `sslmode=require`) via Spring Boot profiles and environment variables—no code changes required:
 
 - **Local PostgreSQL (default):** `SPRING_PROFILES_ACTIVE=local` connects to `127.0.0.1:5433/ordexa_db`.
 - **Supabase Cloud PostgreSQL:** Set `SPRING_PROFILES_ACTIVE=supabase` and supply `SUPABASE_DB_PASSWORD` (or `SPRING_DATASOURCE_PASSWORD`) via your local `.env` or shell environment.

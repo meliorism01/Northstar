@@ -1,6 +1,6 @@
-# ORDEXA — Local PostgreSQL to Supabase Data Migration Guide
+# NORTHSTAR — Local PostgreSQL to Supabase Data Migration Guide
 
-This document defines the safe, auditable procedure for migrating existing ORDEXA development data from the local PostgreSQL cluster (`127.0.0.1:5433/ordexa_db`) to Supabase Cloud PostgreSQL (`aws-1-ap-southeast-2.pooler.supabase.com:5432/postgres`).
+This document defines the safe, auditable procedure for migrating existing NORTHSTAR development data from the local PostgreSQL cluster (`127.0.0.1:5433/ordexa_db`) to Supabase Cloud PostgreSQL (`aws-1-ap-southeast-2.pooler.supabase.com:5432/postgres`).
 
 > [!CAUTION]
 > **Do NOT run data migration until:**
@@ -100,7 +100,7 @@ $tableArgs = $tables | ForEach-Object { "--table=public.$_" }
 
 ## 4. Import Data & Preserve Timestamps
 
-All timestamps in ORDEXA (`created_at`, `updated_at`, `order_date`, `occurred_at`, `expires_at`) are stored as `TIMESTAMPTZ` in UTC. Run `psql` with `ON_ERROR_STOP=1` inside a single transaction (`--single-transaction`) so any error aborts cleanly without partial writes:
+All timestamps in NORTHSTAR (`created_at`, `updated_at`, `order_date`, `occurred_at`, `expires_at`) are stored as `TIMESTAMPTZ` in UTC. Run `psql` with `ON_ERROR_STOP=1` inside a single transaction (`--single-transaction`) so any error aborts cleanly without partial writes:
 
 ```powershell
 $env:PGSSLMODE = "require"
@@ -118,7 +118,7 @@ $env:PGSSLMODE = "require"
 
 ## 5. Handle PostgreSQL Sequences
 
-ORDEXA uses `UUID` primary keys on business entities (`merchants`, `users`, `customers`, `orders`, etc.) and `BIGSERIAL`/`IDENTITY` on audit/bootstrap tables (`system_bootstrap_audit`). Reset any sequences after data import to prevent primary key collisions on future inserts:
+NORTHSTAR uses `UUID` primary keys on business entities (`merchants`, `users`, `customers`, `orders`, etc.) and `BIGSERIAL`/`IDENTITY` on audit/bootstrap tables (`system_bootstrap_audit`). Reset any sequences after data import to prevent primary key collisions on future inserts:
 
 ```sql
 DO $$

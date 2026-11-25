@@ -30,11 +30,11 @@ class HealthCheckServiceTest {
         when(resultSet.next()).thenReturn(true);
         when(resultSet.getInt(1)).thenReturn(1);
 
-        HealthCheckService service = new HealthCheckService(dataSource, "ORDEXA");
+        HealthCheckService service = new HealthCheckService(dataSource, "NORTHSTAR");
         HealthResponse response = service.checkHealth();
 
         assertThat(response.status()).isEqualTo("UP");
-        assertThat(response.application()).isEqualTo("ORDEXA");
+        assertThat(response.application()).isEqualTo("NORTHSTAR");
         assertThat(response.database()).isEqualTo("CONNECTED");
     }
 
@@ -43,11 +43,11 @@ class HealthCheckServiceTest {
         DataSource dataSource = mock(DataSource.class);
         when(dataSource.getConnection()).thenThrow(new SQLException("Connection refused"));
 
-        HealthCheckService service = new HealthCheckService(dataSource, "ORDEXA");
+        HealthCheckService service = new HealthCheckService(dataSource, "NORTHSTAR");
         HealthResponse response = service.checkHealth();
 
         assertThat(response.status()).isEqualTo("DOWN");
-        assertThat(response.application()).isEqualTo("ORDEXA");
+        assertThat(response.application()).isEqualTo("NORTHSTAR");
         assertThat(response.database()).isEqualTo("DISCONNECTED");
     }
 

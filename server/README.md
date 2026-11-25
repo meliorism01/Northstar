@@ -1,4 +1,4 @@
-# ORDEXA Backend Server (`ordexa-server`) — Milestones 2 & 3
+# NORTHSTAR Backend Server (`ordexa-server`) — Milestones 2 & 3
 
 Production-grade Spring Boot 3.4.3 modular monolith implementing multi-tenant authentication, merchant workspaces, role-based access control (RBAC), rotated refresh tokens, database-backed Order & Customer Management, controlled order lifecycle transitions, CSV order importing, and PostgreSQL persistence.
 

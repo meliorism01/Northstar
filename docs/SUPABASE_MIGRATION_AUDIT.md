@@ -1,7 +1,7 @@
-# ORDEXA — Supabase Cloud PostgreSQL Migration Audit
+# NORTHSTAR — Supabase Cloud PostgreSQL Migration Audit
 
 **Date:** 2026-11-25  
-**Scope:** Pre-migration architectural, configuration, schema, security, and risk audit for migrating ORDEXA from local PostgreSQL to Supabase Cloud PostgreSQL (Shared Pooler — Session Mode).
+**Scope:** Pre-migration architectural, configuration, schema, security, and risk audit for migrating NORTHSTAR from local PostgreSQL to Supabase Cloud PostgreSQL (Shared Pooler — Session Mode).
 
 ---
 
@@ -99,7 +99,7 @@ All 4 Flyway migrations in `server/src/main/resources/db/migration/` use standar
 ## 6. Safe Migration Plan
 
 1. **Configure Environment-Based Connectivity**: Add `application-supabase.yml` and update `application.yml` + `.env.example` while preserving `local`, `docker`, and `test` profiles intact.
-2. **Verify Empty Cloud Database**: Connect to Supabase PostgreSQL via JDBC/SSL (using local env credentials, never committed) and verify `public` schema has no conflicting ORDEXA tables or `flyway_schema_history`.
+2. **Verify Empty Cloud Database**: Connect to Supabase PostgreSQL via JDBC/SSL (using local env credentials, never committed) and verify `public` schema has no conflicting NORTHSTAR tables or `flyway_schema_history`.
 3. **Initialize Cloud Schema via Flyway**: Run Spring Boot / Flyway against Supabase with `ddl-auto: validate` to apply `V1`–`V4` cleanly.
 4. **Validate Schema & Health**: Confirm Hibernate `validate`, `/actuator/health`, and core API endpoints against Supabase.
 5. **Preserve Local Data**: Document backup and ordered data migration in `docs/LOCAL_TO_SUPABASE_DATA_MIGRATION.md` and pause for explicit approval before migrating local rows.

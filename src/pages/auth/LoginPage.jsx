@@ -83,7 +83,7 @@ export function LoginPage() {
           <OrdexaWordmark size="md" />
         </Link>
         <div className="flex items-center gap-3 text-[13px] font-display font-semibold text-[#5C6888]">
-          <span className="hidden sm:inline">New to ORDEXA?</span>
+          <span className="hidden sm:inline">New to NORTHSTAR?</span>
           <Link to="/register">
             <Button variant="outline" size="sm">
               Create Workspace
@@ -98,7 +98,7 @@ export function LoginPage() {
           <div className="text-center mb-6">
             <SectionEyebrow>Merchant Console Authentication</SectionEyebrow>
             <h1 className="mt-3 font-display text-[26px] sm:text-[30px] font-extrabold text-[#465478] tracking-[-0.03em]">
-              Sign in to <span className="rescale-gradient-text">ORDEXA</span>
+              Sign in to <span className="rescale-gradient-text">NORTHSTAR</span>
             </h1>
             <p className="mt-1.5 text-[13px] text-[#6E7896]">
               Access your isolated merchant workspace and RTO rescue engine.

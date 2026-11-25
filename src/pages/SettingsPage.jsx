@@ -572,7 +572,7 @@ export function SettingsPage() {
           </div>
 
           <Hint>
-            ORDEXA isolates all customer records inside your merchant workspace—no cross-merchant phone or address blacklists are shared externally.
+            NORTHSTAR isolates all customer records inside your merchant workspace—no cross-merchant phone or address blacklists are shared externally.
           </Hint>
 
           <ToggleRow

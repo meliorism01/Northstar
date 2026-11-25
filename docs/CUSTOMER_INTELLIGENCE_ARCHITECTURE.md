@@ -1,12 +1,12 @@
-# ORDEXA — Customer Intelligence Graph Architecture Reference (Milestone 4)
+# NORTHSTAR — Customer Intelligence Graph Architecture Reference (Milestone 4)
 
 ## 1. Architectural Overview & Storage Decision
 
-The **ORDEXA Customer Intelligence Graph** transforms merchant-scoped transactional records (`customers`, `orders`, `order_items`, `order_status_history`, and `customer_behavioural_events`) into a behavioral intelligence, explainable segmentation, product co-purchase, and relationship graph engine.
+The **NORTHSTAR Customer Intelligence Graph** transforms merchant-scoped transactional records (`customers`, `orders`, `order_items`, `order_status_history`, and `customer_behavioural_events`) into a behavioral intelligence, explainable segmentation, product co-purchase, and relationship graph engine.
 
 ### Why PostgreSQL Instead of Neo4j / External Graph Databases
 - **Single Source of Transactional Truth:** All customer, order, line item, and status transition entities reside in PostgreSQL 18 (`V1`–`V4` Flyway migrations). Computing graph topologies and behavioral metrics directly from PostgreSQL guarantees immediate ACID consistency when an order is created, updated, or transitioned.
-- **Bounded Merchant Neighborhoods:** Graph queries in ORDEXA are strictly scoped to a single authenticated merchant workspace (`merchant_id`) and bounded by explicit node limits (`limit`, default `120`, max `500`), requiring at most 1–2 relational hops (`Customer -> Order -> OrderItem/Product` and `Customer -> Shared Product -> Customer`).
+- **Bounded Merchant Neighborhoods:** Graph queries in NORTHSTAR are strictly scoped to a single authenticated merchant workspace (`merchant_id`) and bounded by explicit node limits (`limit`, default `120`, max `500`), requiring at most 1–2 relational hops (`Customer -> Order -> OrderItem/Product` and `Customer -> Shared Product -> Customer`).
 - **Zero Operational Synchronization Drift:** Avoiding an external Neo4j, Redis, or Kafka pipeline eliminates dual-write anomalies and keeps the modular monolith simple, auditable, and fast.
 
 ---

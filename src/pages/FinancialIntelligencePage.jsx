@@ -130,7 +130,7 @@ export function FinancialIntelligencePage() {
       />
 
       <Hint>
-        <strong>Conservative Attribution Policy:</strong> ORDEXA never counts pre-dispatch cancelled orders as &ldquo;rescued revenue.&rdquo; Pre-dispatch cancellations are isolated under <em>Freight Burn Avoided</em>, while net rescue savings deduct every rupee of WhatsApp/SMS/IVR outreach spend.
+        <strong>Conservative Attribution Policy:</strong> NORTHSTAR never counts pre-dispatch cancelled orders as &ldquo;rescued revenue.&rdquo; Pre-dispatch cancellations are isolated under <em>Freight Burn Avoided</em>, while net rescue savings deduct every rupee of WhatsApp/SMS/IVR outreach spend.
       </Hint>
 
       {/* 4 Financial Ledger Buckets */}

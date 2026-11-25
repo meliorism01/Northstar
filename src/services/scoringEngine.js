@@ -1,5 +1,5 @@
 /**
- * ORDEXA Modular Rules-Based RTO Risk & Intervention Scoring Engine (v1.0)
+ * NORTHSTAR Modular Rules-Based RTO Risk & Intervention Scoring Engine (v1.0)
  *
  * Design Note:
  * Intentionally implemented as a transparent, auditable rules-based engine
@@ -189,6 +189,6 @@ export function evaluateOrderRisk(order, customer, rules = {}) {
     estimatedRtoExposure,
     interventionCost,
     expectedFinancialImpact,
-    engineVersion: 'ORDEXA Rules Engine v1.0 (ML-Ready)',
+    engineVersion: 'NORTHSTAR Rules Engine v1.0 (ML-Ready)',
   };
 }

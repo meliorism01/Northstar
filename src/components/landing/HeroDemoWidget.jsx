@@ -107,7 +107,7 @@ export function HeroDemoWidget() {
               Interactive Pre-Dispatch Sandbox
             </div>
             <div className="text-[11.5px] text-[#8891AA]">
-              Test ORDEXA&apos;s rules-based RTO scoring &amp; WhatsApp rescue live
+              Test NORTHSTAR&apos;s rules-based RTO scoring &amp; WhatsApp rescue live
             </div>
           </div>
         </div>
@@ -257,7 +257,7 @@ export function HeroDemoWidget() {
                 <>
                   <div className="rounded-[16px] rounded-tr-xs bg-[#EEF0FA] border border-[#DFE1F5] px-3.5 py-2.5 text-[12px] text-[#465478]">
                     <span className="font-display font-bold text-[#545C9E] block text-[10.5px] mb-0.5">
-                      ORDEXA WhatsApp Bot (Simulated)
+                      NORTHSTAR WhatsApp Bot (Simulated)
                     </span>
                     Hi {scenario.buyer.split(' ')[0]}! Please confirm your {scenario.store} order{' '}
                     {scenario.id} ({formatINR(scenario.value)}) so we can prioritize dispatch.

@@ -21,7 +21,7 @@ public class HealthCheckService {
 
     public HealthCheckService(
             DataSource dataSource,
-            @Value("${spring.application.name:ORDEXA}") String applicationName) {
+            @Value("${spring.application.name:NORTHSTAR}") String applicationName) {
         this.dataSource = dataSource;
         this.applicationName = applicationName;
     }

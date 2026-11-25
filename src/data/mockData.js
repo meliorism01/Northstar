@@ -27,7 +27,7 @@ export const INITIAL_STORES = [
     id: 'store-csv-1',
     name: 'ZariPulse WhatsApp & CSV',
     platform: 'Manual CSV / Social',
-    domain: 'whatsapp-catalog.ordexa.demo',
+    domain: 'whatsapp-catalog.northstar.demo',
     status: 'Active (Local Import)',
     integrationMode: 'live-local',
     ordersSynced: 5,
@@ -117,7 +117,7 @@ export const INITIAL_CUSTOMERS = [
         { id: 'REC-KC-204', store: 'KoraCraft Home & Living', channel: 'WooCommerce', status: 'Merged', confidence: 94 },
       ],
       auditLog: [
-        { timestamp: '2026-10-14T11:22:00Z', actor: 'ORDEXA Identity Engine', action: 'Linked Shopify & WooCommerce records (96% confidence, merchant-scoped)' },
+        { timestamp: '2026-10-14T11:22:00Z', actor: 'NORTHSTAR Identity Engine', action: 'Linked Shopify & WooCommerce records (96% confidence, merchant-scoped)' },
       ],
     },
   },
@@ -160,7 +160,7 @@ export const INITIAL_CUSTOMERS = [
         { id: 'REC-VG-109', store: 'VedaGlow Botanicals', channel: 'Shopify', status: 'Primary', confidence: 99 },
       ],
       auditLog: [
-        { timestamp: '2026-08-03T10:00:00Z', actor: 'ORDEXA Identity Engine', action: 'Created verified profile within merchant scope' },
+        { timestamp: '2026-08-03T10:00:00Z', actor: 'NORTHSTAR Identity Engine', action: 'Created verified profile within merchant scope' },
       ],
     },
   },
@@ -296,7 +296,7 @@ export const INITIAL_CUSTOMERS = [
         { id: 'REC-KC-519', store: 'KoraCraft Home & Living', channel: 'WooCommerce', status: 'Reviewable', confidence: 84 },
       ],
       auditLog: [
-        { timestamp: '2026-11-22T10:35:00Z', actor: 'ORDEXA Identity Engine', action: 'Flagged secondary record for reviewable merge (84% confidence)' },
+        { timestamp: '2026-11-22T10:35:00Z', actor: 'NORTHSTAR Identity Engine', action: 'Flagged secondary record for reviewable merge (84% confidence)' },
       ],
     },
   },

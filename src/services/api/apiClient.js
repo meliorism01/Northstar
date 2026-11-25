@@ -131,7 +131,7 @@ export async function apiRequest(
     });
   } catch (networkErr) {
     throw new ApiError(
-      'Unable to reach ORDEXA backend server. Please verify the backend is running.',
+      'Unable to reach NORTHSTAR backend server. Please verify the backend is running.',
       {
         status: 0,
         errorCode: 'NETWORK_ERROR',

@@ -1,4 +1,4 @@
-# ORDEXA — Backend Architecture, Multi-Tenant Security & Order Management Reference
+# NORTHSTAR — Backend Architecture, Multi-Tenant Security & Order Management Reference
 
 ## 1. End-to-End Authentication & Workspace Lifecycle
 

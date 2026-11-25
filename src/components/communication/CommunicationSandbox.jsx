@@ -81,11 +81,10 @@ export function CommunicationSandbox({ order }) {
               key={ch}
               type="button"
               onClick={() => setChannel(ch)}
-              className={`px-3 py-1 rounded-full text-[11.5px] font-display font-bold transition-all ${
-                channel === ch
-                  ? 'bg-white text-[#465478] shadow-rescale-card'
-                  : 'text-[#7C86A2] hover:text-[#465478]'
-              }`}
+              className={`px-3 py-1 rounded-full text-[11.5px] font-display font-bold transition-all ${channel === ch
+                ? 'bg-white text-[#465478] shadow-rescale-card'
+                : 'text-[#7C86A2] hover:text-[#465478]'
+                }`}
             >
               {ch} (₹{CHANNEL_COSTS[ch].toFixed(2)})
             </button>
@@ -118,24 +117,21 @@ export function CommunicationSandbox({ order }) {
                 className={`flex ${isMerchant ? 'justify-end' : 'justify-start'}`}
               >
                 <div
-                  className={`max-w-[85%] rounded-[18px] px-4 py-3 text-[12.5px] shadow-xs ${
-                    isMerchant
-                      ? 'bg-rescale-btn text-white rounded-br-xs'
-                      : 'bg-white border border-[#DFE1F5] text-[#465478] rounded-bl-xs'
-                  }`}
+                  className={`max-w-[85%] rounded-[18px] px-4 py-3 text-[12.5px] shadow-xs ${isMerchant
+                    ? 'bg-rescale-btn text-white rounded-br-xs'
+                    : 'bg-white border border-[#DFE1F5] text-[#465478] rounded-bl-xs'
+                    }`}
                 >
                   <div
-                    className={`text-[10px] font-display font-bold uppercase tracking-wider mb-1 ${
-                      isMerchant ? 'text-white/85' : 'text-[#7584D6]'
-                    }`}
+                    className={`text-[10px] font-display font-bold uppercase tracking-wider mb-1 ${isMerchant ? 'text-white/85' : 'text-[#7584D6]'
+                      }`}
                   >
-                    {isMerchant ? `ORDEXA · ${msg.channel}` : `${order.customerName} · Buyer`}
+                    {isMerchant ? `NORTHSTAR · ${msg.channel}` : `${order.customerName} · Buyer`}
                   </div>
                   <p className="leading-relaxed">{msg.text}</p>
                   <div
-                    className={`text-[10px] mt-1.5 ${
-                      isMerchant ? 'text-white/75' : 'text-[#9AA3BA]'
-                    }`}
+                    className={`text-[10px] mt-1.5 ${isMerchant ? 'text-white/75' : 'text-[#9AA3BA]'
+                      }`}
                   >
                     {msg.deliveryStatus} · {formatDateTime(msg.timestamp)}
                   </div>

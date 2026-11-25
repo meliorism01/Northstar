@@ -13,12 +13,12 @@ public class OpenApiConfig {
     public OpenAPI ordexaOpenAPI() {
         return new OpenAPI()
                 .info(new Info()
-                        .title("ORDEXA API")
+                        .title("NORTHSTAR API")
                         .version("v1")
                         .description(
-                                "ORDEXA — AI-Powered Order Management, Customer Intelligence Graph, "
-                                + "and RTO Prevention SaaS Platform API Foundation.")
+                                "NORTHSTAR — Navigate Commerce with Clarity. AI-Powered Order Management, "
+                                + "Customer Intelligence Graph, and RTO Prevention SaaS Platform API Foundation.")
                         .contact(new Contact()
-                                .name("ORDEXA Platform Engineering")));
+                                .name("NORTHSTAR Platform Engineering")));
     }
 }

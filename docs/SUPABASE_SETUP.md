@@ -1,6 +1,6 @@
-# ORDEXA — Supabase Cloud PostgreSQL Setup Guide
+# NORTHSTAR — Supabase Cloud PostgreSQL Setup Guide
 
-ORDEXA uses **Supabase** as managed PostgreSQL infrastructure over JDBC (Shared Pooler — Session Mode, SSL required), while preserving Spring Boot 3.4.x, Spring Data JPA, Hibernate (`ddl-auto: validate`), Flyway migrations, and JWT multi-tenant authentication.
+NORTHSTAR uses **Supabase** as managed PostgreSQL infrastructure over JDBC (Shared Pooler — Session Mode, SSL required), while preserving Spring Boot 3.4.x, Spring Data JPA, Hibernate (`ddl-auto: validate`), Flyway migrations, and JWT multi-tenant authentication.
 
 ---
 

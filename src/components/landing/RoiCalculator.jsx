@@ -162,7 +162,7 @@ export function RoiCalculator() {
             <div className="rounded-[16px] bg-[#F4F5FC] border border-[#E3E6FA] px-4 py-3 flex items-start gap-2.5 text-[12px] text-[#5C6888]">
               <Info className="w-4 h-4 text-[#7584D6] flex-shrink-0 mt-0.5" />
               <span>
-                ORDEXA deducts estimated WhatsApp/SMS outreach costs ({formatINR(metrics.outreachSpend)}/mo) from gross freight protected so savings remain conservative and audit-ready.
+                NORTHSTAR deducts estimated WhatsApp/SMS outreach costs ({formatINR(metrics.outreachSpend)}/mo) from gross freight protected so savings remain conservative and audit-ready.
               </span>
             </div>
           </div>

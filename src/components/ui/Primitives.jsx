@@ -12,7 +12,7 @@ import { getAttentionStyles, getStatusStyles } from '../../utils/formatters';
 import { useOrdexaStore } from '../../store/useOrdexaStore';
 
 /* ------------------------------------------------------------------ */
-/* Rescale-Template Brand Wordmark (ordexa® in cyan->periwinkle)      */
+/* Rescale-Template Brand Wordmark (northstar® in cyan->periwinkle)   */
 /* ------------------------------------------------------------------ */
 
 export function OrdexaWordmark({ size = 'md', className = '' }) {
@@ -23,11 +23,10 @@ export function OrdexaWordmark({ size = 'md', className = '' }) {
   };
   return (
     <span
-      className={`inline-flex items-start font-display font-extrabold tracking-[-0.045em] leading-none select-none ${
-        sizes[size] || sizes.md
-      } ${className}`}
+      className={`inline-flex items-start font-display font-extrabold tracking-[-0.045em] leading-none select-none ${sizes[size] || sizes.md
+        } ${className}`}
     >
-      <span className="rescale-wordmark-text">ordexa</span>
+      <span className="rescale-wordmark-text">northstar</span>
       <sup className="text-[10px] font-semibold text-[#7584D6] ml-0.5 mt-1">®</sup>
     </span>
   );
@@ -142,9 +141,8 @@ export function IconTile({ icon: Icon, tone = 'peri', size = 'md', className = '
   };
   return (
     <span
-      className={`inline-flex items-center justify-center border shadow-icon-ring flex-shrink-0 ${
-        RING_TONES[tone] || RING_TONES.peri
-      } ${sizes[size] || sizes.md} ${className}`}
+      className={`inline-flex items-center justify-center border shadow-icon-ring flex-shrink-0 ${RING_TONES[tone] || RING_TONES.peri
+        } ${sizes[size] || sizes.md} ${className}`}
     >
       <Icon className={size === 'lg' ? 'w-5 h-5' : size === 'sm' ? 'w-4 h-4' : 'w-[18px] h-[18px]'} />
     </span>
@@ -154,11 +152,10 @@ export function IconTile({ icon: Icon, tone = 'peri', size = 'md', className = '
 export function Card({ children, featured = false, className = '', ...props }) {
   return (
     <div
-      className={`rounded-[22px] transition-all ${
-        featured
-          ? 'bg-rescale-btn text-white shadow-rescale-btn border border-[#8D96EA]'
-          : 'rescale-card text-[#465478]'
-      } ${className}`}
+      className={`rounded-[22px] transition-all ${featured
+        ? 'bg-rescale-btn text-white shadow-rescale-btn border border-[#8D96EA]'
+        : 'rescale-card text-[#465478]'
+        } ${className}`}
       {...props}
     >
       {children}
@@ -265,11 +262,10 @@ export function KpiCard({
   return (
     <div
       onClick={onClick}
-      className={`rounded-[22px] p-5 sm:p-6 transition-all duration-200 ${
-        featured
-          ? 'bg-rescale-btn text-white shadow-rescale-btn border border-[#8C95E8]'
-          : 'rescale-card text-[#465478]'
-      } ${onClick ? 'cursor-pointer rescale-card-hover' : ''} ${className}`}
+      className={`rounded-[22px] p-5 sm:p-6 transition-all duration-200 ${featured
+        ? 'bg-rescale-btn text-white shadow-rescale-btn border border-[#8C95E8]'
+        : 'rescale-card text-[#465478]'
+        } ${onClick ? 'cursor-pointer rescale-card-hover' : ''} ${className}`}
     >
       <div className="flex items-center gap-4">
         {Icon && (
@@ -281,25 +277,22 @@ export function KpiCard({
         )}
         <div className="min-w-0 flex-1">
           <div
-            className={`font-display text-[13px] font-medium truncate ${
-              featured ? 'text-white/85' : 'text-[#5C6888]'
-            }`}
+            className={`font-display text-[13px] font-medium truncate ${featured ? 'text-white/85' : 'text-[#5C6888]'
+              }`}
           >
             {title}
           </div>
           <div className="mt-1 flex items-baseline justify-between gap-2 flex-wrap">
             <span
-              className={`font-display text-[26px] sm:text-[29px] font-extrabold tracking-[-0.03em] num leading-none ${
-                featured ? 'text-white' : 'text-[#465478]'
-              }`}
+              className={`font-display text-[26px] sm:text-[29px] font-extrabold tracking-[-0.03em] num leading-none ${featured ? 'text-white' : 'text-[#465478]'
+                }`}
             >
               {value}
             </span>
             {delta && (
               <span
-                className={`font-display text-[13.5px] font-bold whitespace-nowrap num ${
-                  featured ? 'text-[#D6F5FF]' : 'text-[#8E9AE2]'
-                }`}
+                className={`font-display text-[13.5px] font-bold whitespace-nowrap num ${featured ? 'text-[#D6F5FF]' : 'text-[#8E9AE2]'
+                  }`}
               >
                 {delta}
               </span>
@@ -307,9 +300,8 @@ export function KpiCard({
           </div>
           {subtitle && (
             <div
-              className={`mt-1.5 text-[11.5px] truncate ${
-                featured ? 'text-white/80' : 'text-[#8891AA]'
-              }`}
+              className={`mt-1.5 text-[11.5px] truncate ${featured ? 'text-white/80' : 'text-[#8891AA]'
+                }`}
             >
               {subtitle}
             </div>
@@ -397,9 +389,8 @@ export function DeltaPill({ value, direction = 'up', invert = false, suffix = ''
   const Icon = direction === 'up' ? ArrowUpRight : ArrowDownRight;
   return (
     <span
-      className={`inline-flex items-center gap-0.5 text-[11px] font-display font-bold px-2 py-0.5 rounded-full ${
-        positive ? 'text-[#17825B] bg-[#ECFEF6]' : 'text-[#E05328] bg-[#FFF1EC]'
-      }`}
+      className={`inline-flex items-center gap-0.5 text-[11px] font-display font-bold px-2 py-0.5 rounded-full ${positive ? 'text-[#17825B] bg-[#ECFEF6]' : 'text-[#E05328] bg-[#FFF1EC]'
+        }`}
     >
       <Icon className="w-3 h-3" />
       {value}
@@ -457,18 +448,16 @@ export function Tabs({ items = [], value, onChange, variant = 'pills', className
               key={item.id}
               type="button"
               onClick={() => onChange(item.id)}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-2.5 text-[12.5px] font-display font-semibold border-b-2 transition-colors whitespace-nowrap ${
-                active
-                  ? 'border-[#7584D6] text-[#465478]'
-                  : 'border-transparent text-[#8891AA] hover:text-[#465478]'
-              }`}
+              className={`inline-flex items-center gap-1.5 px-3.5 py-2.5 text-[12.5px] font-display font-semibold border-b-2 transition-colors whitespace-nowrap ${active
+                ? 'border-[#7584D6] text-[#465478]'
+                : 'border-transparent text-[#8891AA] hover:text-[#465478]'
+                }`}
             >
               {item.label}
               {typeof item.count === 'number' && (
                 <span
-                  className={`font-mono text-[10px] px-2 py-0.5 rounded-full num ${
-                    active ? 'bg-[#E3E6FA] text-[#545C9E]' : 'bg-[#F1F2F9] text-[#8891AA]'
-                  }`}
+                  className={`font-mono text-[10px] px-2 py-0.5 rounded-full num ${active ? 'bg-[#E3E6FA] text-[#545C9E]' : 'bg-[#F1F2F9] text-[#8891AA]'
+                    }`}
                 >
                   {item.count}
                 </span>
@@ -491,11 +480,10 @@ export function Tabs({ items = [], value, onChange, variant = 'pills', className
             key={item.id}
             type="button"
             onClick={() => onChange(item.id)}
-            className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 text-[12px] font-display font-semibold rounded-full transition-all whitespace-nowrap ${
-              active
-                ? 'bg-white text-[#465478] shadow-rescale-card'
-                : 'text-[#7C86A2] hover:text-[#465478]'
-            }`}
+            className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 text-[12px] font-display font-semibold rounded-full transition-all whitespace-nowrap ${active
+              ? 'bg-white text-[#465478] shadow-rescale-card'
+              : 'text-[#7C86A2] hover:text-[#465478]'
+              }`}
           >
             {item.label}
             {typeof item.count === 'number' && (
@@ -593,9 +581,8 @@ export function Avatar({ name = '?', size = 'md', className = '' }) {
 
   return (
     <span
-      className={`inline-flex items-center justify-center font-display font-bold rounded-full border flex-shrink-0 ${palette} ${
-        sizes[size] || sizes.md
-      } ${className}`}
+      className={`inline-flex items-center justify-center font-display font-bold rounded-full border flex-shrink-0 ${palette} ${sizes[size] || sizes.md
+        } ${className}`}
     >
       {initials}
     </span>

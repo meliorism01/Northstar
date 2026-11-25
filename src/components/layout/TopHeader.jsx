@@ -320,7 +320,7 @@ export function TopHeader({ onOpenMobileNav }) {
           type="button"
           onClick={handleLogout}
           data-testid="header-logout-btn"
-          title="Sign out of ORDEXA"
+          title="Sign out of NORTHSTAR"
           className="w-10 h-10 rounded-full bg-white border border-[#E3E6FA] shadow-rescale-card flex items-center justify-center text-[#D13B56] hover:bg-[#FFF0F2] transition-colors"
           aria-label="Sign out"
         >
