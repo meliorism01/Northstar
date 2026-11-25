@@ -78,6 +78,22 @@ export function getAttentionStyles(level) {
 
 export function getStatusStyles(status) {
   const map = {
+    // Real PostgreSQL Order Statuses
+    CREATED: 'bg-[#FFF5ED] text-[#D96030] border-[#FDE0CA]',
+    CONFIRMED: 'bg-[#EEF2FF] text-[#545C9E] border-[#DFE1F5]',
+    PROCESSING: 'bg-[#ECFAFF] text-[#1D82A8] border-[#C5EEFD]',
+    SHIPPED: 'bg-[#F1F2F9] text-[#465478] border-[#DFE1F5]',
+    DELIVERED: 'bg-[#ECFEF6] text-[#17825B] border-[#C3F3DE]',
+    CANCELLED: 'bg-[#FFF0F2] text-[#D13B56] border-[#FECDD6]',
+
+    // Real PostgreSQL Payment Statuses
+    PENDING: 'bg-[#FFF5ED] text-[#D96030] border-[#FDE0CA]',
+    PAID: 'bg-[#ECFEF6] text-[#17825B] border-[#C3F3DE]',
+    PARTIALLY_PAID: 'bg-[#EEF2FF] text-[#545C9E] border-[#DFE1F5]',
+    REFUNDED: 'bg-[#F4F5F9] text-[#7D859B] border-[#E3E6F0]',
+    FAILED: 'bg-[#FFF0F2] text-[#D13B56] border-[#FECDD6]',
+
+    // Sandbox Demo Statuses
     'Pending Verification': 'bg-[#FFF5ED] text-[#D96030] border-[#FDE0CA]',
     'Awaiting Customer': 'bg-[#ECFAFF] text-[#1D82A8] border-[#C5EEFD]',
     'Held for Review': 'bg-[#FFF0F8] text-[#B83B82] border-[#FAD1E8]',

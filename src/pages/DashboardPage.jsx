@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   ShieldCheck,
@@ -6,83 +6,79 @@ import {
   Sparkles,
   ChevronDown,
   ArrowRight,
-  CheckCircle2,
   Truck,
   Activity,
-  Zap,
+  Plus,
+  Users,
 } from 'lucide-react';
 import {
   KpiCard,
   SectionTitle,
   Button,
-  AttentionBadge,
   StatusBadge,
-  StoreBadge,
   IconTile,
 } from '../components/ui/Primitives';
 import { MirroredCapsuleChart, PopOutDonutChart } from '../components/charts/ChartKit';
+import { fetchOrders } from '../services/api/ordersApi';
+import { fetchCustomers } from '../services/api/customersApi';
+import { useAuthStore } from '../store/useAuthStore';
 import { useOrdexaStore } from '../store/useOrdexaStore';
 import { formatINR, formatDateTime } from '../utils/formatters';
 
 export function DashboardPage() {
   const navigate = useNavigate();
-  const orders = useOrdexaStore((s) => s.orders);
+  const activeWorkspace = useAuthStore((s) => s.activeWorkspace);
+
+  // Live PostgreSQL Orders & Customers State
+  const [pgOrdersPage, setPgOrdersPage] = useState({ items: [], totalElements: 0 });
+  const [pgCustomersPage, setPgCustomersPage] = useState({ items: [], totalElements: 0 });
+  const [pgLoading, setPgLoading] = useState(true);
+
+  // Sandbox Activity & Analytics State (preserved for visual telemetry)
+  const sandboxOrders = useOrdexaStore((s) => s.orders);
   const ndrCases = useOrdexaStore((s) => s.ndrCases);
   const activity = useOrdexaStore((s) => s.activity);
-  const messagingExpenses = useOrdexaStore((s) => s.messagingExpenses);
-  const approveIntervention = useOrdexaStore((s) => s.approveIntervention);
-  const simulateShopifyWebhook = useOrdexaStore((s) => s.simulateShopifyWebhook);
-  const setSelectedOrderId = useOrdexaStore((s) => s.setSelectedOrderId);
 
-  const [period, setPeriod] = useState('Month'); // 'Week' | 'Month' | 'Quarter'
+  const [period, setPeriod] = useState('Month');
 
-  const summary = useMemo(() => {
-    const rescuedDelivered = orders.filter((o) => o.rescued && o.status === 'Delivered');
-    const rescuedPipeline = orders.filter((o) => o.rescued && o.status !== 'Delivered');
-    const cancelledPreDispatch = orders.filter((o) => o.status === 'Cancelled');
+  const loadLiveDashboard = useCallback(async () => {
+    if (!activeWorkspace?.merchantId) return;
+    setPgLoading(true);
+    try {
+      const [ordersData, customersData] = await Promise.all([
+        fetchOrders({ page: 0, size: 8, sortBy: 'createdAt', sortDir: 'desc' }),
+        fetchCustomers({ page: 0, size: 10 }),
+      ]);
+      setPgOrdersPage(ordersData || { items: [], totalElements: 0 });
+      setPgCustomersPage(customersData || { items: [], totalElements: 0 });
+    } catch {
+      // Handled gracefully if empty
+    } finally {
+      setPgLoading(false);
+    }
+  }, [activeWorkspace?.merchantId]);
 
-    const verifiedProtected = rescuedDelivered.reduce(
-      (sum, o) => sum + (o.estimatedRtoExposure || 150),
-      0
-    );
-    const pipelineProtected = rescuedPipeline.reduce(
-      (sum, o) => sum + Math.round((o.estimatedRtoExposure || 150) * 0.72),
-      0
-    );
-    const netSavings = Math.max(
-      0,
-      Math.round(verifiedProtected + pipelineProtected - messagingExpenses)
-    );
+  useEffect(() => {
+    loadLiveDashboard();
+  }, [loadLiveDashboard]);
 
-    const activeQueue = orders.filter(
-      (o) => !['Delivered', 'RTO', 'Cancelled'].includes(o.status)
+  const pgMetrics = useMemo(() => {
+    const items = pgOrdersPage.items || [];
+    const recentGmv = items.reduce((sum, o) => sum + (Number(o.totalAmount) || 0), 0);
+    const activeOrders = items.filter((o) =>
+      ['CREATED', 'CONFIRMED', 'PROCESSING', 'SHIPPED'].includes(o.orderStatus)
     ).length;
-
-    const highAttentionOpen = orders.filter(
-      (o) =>
-        o.attentionLevel === 'HIGH' &&
-        !['Delivered', 'RTO', 'Cancelled', 'Dispatched'].includes(o.status)
-    ).length;
-
-    const totalCompletedOrRescued = orders.filter(
-      (o) => o.status === 'Delivered' || o.rescued
-    ).length;
-    const rescueRate =
-      orders.length > 0 ? ((totalCompletedOrRescued / orders.length) * 100).toFixed(1) : '0.0';
-
     return {
-      netSavings,
-      activeQueue,
-      highAttentionOpen,
-      rescueRate,
-      rescuedCount: rescuedDelivered.length + rescuedPipeline.length,
-      cancelledCount: cancelledPreDispatch.length,
+      totalOrders: pgOrdersPage.totalElements || 0,
+      totalCustomers: pgCustomersPage.totalElements || 0,
+      recentGmv,
+      activeOrders,
       openNdr: ndrCases.filter((n) => n.recoveryStatus !== 'Recovered').length,
     };
-  }, [orders, ndrCases, messagingExpenses]);
+  }, [pgOrdersPage, pgCustomersPage, ndrCases]);
 
   const capsuleSeries = useMemo(() => {
-    const boost = Math.min(10, Math.max(0, orders.length - 12));
+    const boost = Math.min(10, pgMetrics.totalOrders);
     if (period === 'Week') {
       return [
         { label: 'Mon', top: 34 + boost, bottom: 22 },
@@ -116,63 +112,47 @@ export function DashboardPage() {
       { label: 'Nov', top: Math.min(58, 53 + boost), bottom: 15 },
       { label: 'Dec', top: Math.min(59, 55 + boost), bottom: 13 },
     ];
-  }, [period, orders.length]);
+  }, [period, pgMetrics.totalOrders]);
 
   const distributionItems = useMemo(() => {
-    const total = Math.max(1, orders.length);
-    const addrCount = orders.filter(
-      (o) => o.recommendedIntervention === 'Address Clarification'
+    const items = pgOrdersPage.items || [];
+    if (items.length === 0) {
+      return [
+        { name: 'Created', value: 30, color: '#FF9FD7' },
+        { name: 'Confirmed', value: 28, color: '#72E1FF' },
+        { name: 'Processing / Shipped', value: 22, color: '#4A78D6' },
+        { name: 'Delivered', value: 20, color: '#8C8CF5' },
+      ];
+    }
+    const created = items.filter((o) => o.orderStatus === 'CREATED').length;
+    const confirmed = items.filter((o) => o.orderStatus === 'CONFIRMED').length;
+    const inTransit = items.filter((o) =>
+      ['PROCESSING', 'SHIPPED'].includes(o.orderStatus)
     ).length;
-    const waCount = orders.filter(
-      (o) => o.recommendedIntervention === 'WhatsApp Confirmation'
-    ).length;
-    const upiCount = orders.filter(
-      (o) =>
-        o.recommendedIntervention === 'Optional Partial Advance' ||
-        o.recommendedIntervention === 'Manual Review'
-    ).length;
-    const autoCount = Math.max(1, total - addrCount - waCount - upiCount);
+    const delivered = items.filter((o) => o.orderStatus === 'DELIVERED').length;
 
     return [
-      {
-        name: 'Landmark Sync',
-        value: Math.max(12, Math.round((addrCount / total) * 100)),
-        color: '#FF9FD7',
-      },
-      {
-        name: 'Auto Manifest',
-        value: Math.max(15, Math.round((autoCount / total) * 100)),
-        color: '#72E1FF',
-      },
-      {
-        name: 'Partial UPI / Ops',
-        value: Math.max(12, Math.round((upiCount / total) * 100)),
-        color: '#4A78D6',
-      },
-      {
-        name: 'WhatsApp Intent',
-        value: Math.max(14, Math.round((waCount / total) * 100)),
-        color: '#8C8CF5',
-      },
+      { name: 'Created', value: Math.max(10, created * 15), color: '#FF9FD7' },
+      { name: 'Confirmed', value: Math.max(10, confirmed * 15), color: '#72E1FF' },
+      { name: 'In Fulfilment', value: Math.max(10, inTransit * 15), color: '#4A78D6' },
+      { name: 'Delivered', value: Math.max(10, delivered * 15), color: '#8C8CF5' },
     ];
-  }, [orders]);
-
-  const recentOrders = orders.slice(0, 6);
+  }, [pgOrdersPage.items]);
 
   return (
     <div className="space-y-8">
-      {/* SECTION 1: Exact Rescale "Performance Overview" + 3 Circular-Ring KPI Cards */}
+      {/* SECTION 1: Performance Overview + 3 Circular-Ring KPI Cards */}
       <section>
         <SectionTitle
           title="Performance Overview"
-          subtitle="Real-time pre-dispatch order verification, rescued margin, and COD risk posture"
+          subtitle={`Live PostgreSQL order core for ${activeWorkspace?.businessName || 'your workspace'}`}
           action={
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={() => navigate('/app/rescue')}>
-                Rescue Queue ({summary.highAttentionOpen})
+              <Button variant="outline" size="sm" onClick={() => navigate('/app/graph')}>
+                <Users className="w-3.5 h-3.5 text-[#7584D6]" /> Customers ({pgMetrics.totalCustomers})
               </Button>
-              <Button variant="primary" size="sm" onClick={simulateShopifyWebhook}>
-                <Zap className="w-3.5 h-3.5" /> Simulate Webhook
+              <Button variant="primary" size="sm" onClick={() => navigate('/app/orders')}>
+                <Plus className="w-3.5 h-3.5" /> Create / Import Orders
               </Button>
             </div>
           }
@@ -180,55 +160,52 @@ export function DashboardPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
           <KpiCard
-            title="Net Freight Protected"
-            value={formatINR(summary.netSavings)}
-            delta={`+${summary.rescuedCount} Rescued`}
-            subtitle={`After deducting ₹${messagingExpenses.toFixed(2)} outreach spend`}
-            icon={ShieldCheck}
-            accent="coral"
-            onClick={() => navigate('/app/financial')}
-          />
-          <KpiCard
-            title="Active Orders in Queue"
-            value={String(summary.activeQueue)}
-            delta={`${summary.highAttentionOpen} High Risk`}
-            subtitle={`${orders.length} total workspace orders · ${summary.openNdr} open NDRs`}
+            title="PostgreSQL Workspace Orders"
+            value={String(pgMetrics.totalOrders)}
+            delta={`${pgMetrics.activeOrders} Active`}
+            subtitle="Persisted in merchant-scoped orders table"
             icon={PackageCheck}
             accent="peri"
             onClick={() => navigate('/app/orders')}
           />
           <KpiCard
-            title="Delivery & Rescue Rate"
-            value={`${summary.rescueRate}%`}
-            delta={`${summary.cancelledCount} Pre-Cancel`}
-            subtitle="Verified deliveries + confirmed buyer rescues"
+            title="Recent Order GMV"
+            value={formatINR(pgMetrics.recentGmv, true)}
+            delta="BigDecimal"
+            subtitle="Server-calculated order totals"
+            icon={ShieldCheck}
+            accent="coral"
+            onClick={() => navigate('/app/orders')}
+          />
+          <KpiCard
+            title="Workspace Customers"
+            value={String(pgMetrics.totalCustomers)}
+            delta="Tenant-Isolated"
+            subtitle={`${sandboxOrders.length} orders in RTO simulation sandbox`}
             icon={Sparkles}
             accent="pink"
-            onClick={() => navigate('/app/analytics')}
+            onClick={() => navigate('/app/graph')}
           />
         </div>
       </section>
 
-      {/* SECTION 2: Exact Rescale 8/4 Split — Performance Analytics + Resource Distribution */}
+      {/* SECTION 2: 8/4 Split — Performance Analytics + Order Lifecycle Distribution */}
       <section className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-        {/* Left (8 cols): Performance Analytics + MirroredCapsuleChart */}
         <div className="lg:col-span-8 flex flex-col">
           <SectionTitle title="Performance Analytics" />
           <div className="rescale-card p-6 flex-1 flex flex-col justify-between">
             <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
-              {/* Dual Dot Legend matching Rescale Screenshot */}
               <div className="flex flex-wrap items-center gap-5 text-[12.5px] font-display font-semibold text-[#5C6888]">
                 <span className="inline-flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-[#7584D6]" />
-                  Verified Deliveries
+                  Verified Fulfilments
                 </span>
                 <span className="inline-flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-[#FA9A7C]" />
-                  RTO Risk Exposure
+                  Exception Exposure
                 </span>
               </div>
 
-              {/* Pill Period Selector ("Month v") matching Rescale Screenshot */}
               <div className="relative inline-flex items-center">
                 <select
                   value={period}
@@ -246,144 +223,132 @@ export function DashboardPage() {
 
             <MirroredCapsuleChart
               data={capsuleSeries}
-              topLabel="Verified Deliveries"
-              bottomLabel="RTO Risk Exposure"
+              topLabel="Verified Fulfilments"
+              bottomLabel="Exception Exposure"
               maxVal={60}
               unitSuffix="K"
             />
           </div>
         </div>
 
-        {/* Right (4 cols): Resource Distribution + PopOutDonutChart */}
         <div className="lg:col-span-4 flex flex-col">
-          <SectionTitle title="Intervention Mix" />
+          <SectionTitle title="Order Lifecycle Mix" />
           <div className="rescale-card p-6 flex-1 flex flex-col justify-between">
             <PopOutDonutChart
               items={distributionItems}
-              calloutTitle="AI Rescue"
-              calloutSubtitle={`${summary.rescuedCount} Saved`}
+              calloutTitle="Order Core"
+              calloutSubtitle={`${pgMetrics.totalOrders} Live`}
             />
           </div>
         </div>
       </section>
 
-      {/* SECTION 3: Recent Incoming Orders Table + Live Workspace Activity */}
+      {/* SECTION 3: Live PostgreSQL Orders Table + Workspace Feed */}
       <section className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Recent Orders Card */}
         <div className="lg:col-span-8">
           <SectionTitle
-            title="Recent Incoming Orders"
-            subtitle="Prioritized by pre-dispatch RTO attention level"
+            title="Recent Workspace Orders (PostgreSQL)"
+            subtitle="Real database-backed orders scoped to your active merchant tenant"
             action={
               <Link
                 to="/app/orders"
                 className="inline-flex items-center gap-1 text-[12.5px] font-display font-bold text-[#545C9E] hover:text-[#465478]"
               >
-                View Full Queue <ArrowRight className="w-3.5 h-3.5 text-[#7584D6]" />
+                Open Order Management <ArrowRight className="w-3.5 h-3.5 text-[#7584D6]" />
               </Link>
             }
           />
 
           <div className="rescale-card overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="border-b border-[#EEF0FA] bg-[#F9FAFB]/80 text-[11px] font-display font-bold uppercase tracking-[0.12em] text-[#8891AA]">
-                    <th className="py-3.5 px-5">Order</th>
-                    <th className="py-3.5 px-4">Buyer &amp; City</th>
-                    <th className="py-3.5 px-4">Value</th>
-                    <th className="py-3.5 px-4">Attention</th>
-                    <th className="py-3.5 px-4">Status</th>
-                    <th className="py-3.5 px-5 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#F1F2F9] text-[13px]">
-                  {recentOrders.map((order) => {
-                    const canApprove = ['Pending Verification', 'Held for Review'].includes(
-                      order.status
-                    );
-                    return (
-                      <tr
-                        key={order.id}
-                        className="hover:bg-[#F9FAFB] transition-colors group"
-                      >
+            {pgLoading && pgOrdersPage.items.length === 0 ? (
+              <div className="p-10 text-center text-[13px] text-[#7C86A2]">
+                Loading orders from PostgreSQL…
+              </div>
+            ) : pgOrdersPage.items.length === 0 ? (
+              <div className="p-10 text-center space-y-3">
+                <div className="font-display text-[15px] font-bold text-[#465478]">
+                  No PostgreSQL orders created in {activeWorkspace?.businessName} yet
+                </div>
+                <p className="text-[12.5px] text-[#7C86A2] max-w-md mx-auto">
+                  Create a manual order or import a CSV batch in Order Management to persist real orders in PostgreSQL.
+                </p>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => navigate('/app/orders')}
+                >
+                  <Plus className="w-3.5 h-3.5" /> Create First Order
+                </Button>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="border-b border-[#EEF0FA] bg-[#F9FAFB]/80 text-[11px] font-display font-bold uppercase tracking-[0.12em] text-[#8891AA]">
+                      <th className="py-3.5 px-5">Order #</th>
+                      <th className="py-3.5 px-4">Customer</th>
+                      <th className="py-3.5 px-4">Total</th>
+                      <th className="py-3.5 px-4">Payment</th>
+                      <th className="py-3.5 px-4">Status</th>
+                      <th className="py-3.5 px-5 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#F1F2F9] text-[13px]">
+                    {pgOrdersPage.items.map((order) => (
+                      <tr key={order.id} className="hover:bg-[#F9FAFB] transition-colors">
                         <td className="py-3.5 px-5">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedOrderId(order.id);
-                              navigate('/app/orders');
-                            }}
-                            className="font-display font-bold text-[#465478] hover:text-[#7584D6] block"
-                          >
-                            {order.id}
-                          </button>
-                          <div className="mt-1">
-                            <StoreBadge store={order.store} />
-                          </div>
+                          <span className="font-display font-extrabold text-[#465478] block">
+                            {order.orderNumber}
+                          </span>
+                          <span className="text-[10.5px] text-[#7584D6] font-bold">
+                            {order.source}
+                          </span>
                         </td>
                         <td className="py-3.5 px-4">
                           <div className="font-display font-semibold text-[#465478]">
                             {order.customerName}
                           </div>
                           <div className="text-[11.5px] text-[#8891AA]">
-                            {order.address.city} · {order.courier}
+                            +91 {order.customerPhone}
                           </div>
                         </td>
-                        <td className="py-3.5 px-4">
-                          <div className="font-display font-bold text-[#465478] num">
-                            {formatINR(order.orderValue)}
-                          </div>
-                          <div className="text-[11px] text-[#8891AA]">{order.paymentMode}</div>
+                        <td className="py-3.5 px-4 font-display font-bold text-[#465478] num">
+                          {formatINR(order.totalAmount, true)}
                         </td>
                         <td className="py-3.5 px-4">
-                          <AttentionBadge level={order.attentionLevel} />
+                          <StatusBadge status={order.paymentStatus} />
                         </td>
                         <td className="py-3.5 px-4">
-                          <StatusBadge status={order.status} />
+                          <StatusBadge status={order.orderStatus} />
                         </td>
                         <td className="py-3.5 px-5 text-right">
-                          {canApprove ? (
-                            <Button
-                              variant="outline"
-                              size="xs"
-                              onClick={() => approveIntervention(order.id)}
-                            >
-                              <CheckCircle2 className="w-3.5 h-3.5 text-[#7584D6]" />
-                              Run Rescue
-                            </Button>
-                          ) : (
-                            <Button
-                              variant="ghost"
-                              size="xs"
-                              onClick={() => {
-                                setSelectedOrderId(order.id);
-                                navigate('/app/orders');
-                              }}
-                            >
-                              Inspect
-                            </Button>
-                          )}
+                          <Button
+                            variant="outline"
+                            size="xs"
+                            onClick={() => navigate('/app/orders')}
+                          >
+                            Manage
+                          </Button>
                         </td>
                       </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Live Workspace Activity Feed */}
+        {/* Right: Workspace Activity & Sandbox Links */}
         <div className="lg:col-span-4 space-y-4">
           <SectionTitle
             title="Live Workspace Feed"
-            subtitle="Audit log of automated & ops events"
+            subtitle="Operational & simulation events"
           />
 
           <div className="rescale-card p-5 space-y-4">
             <div className="space-y-3.5 max-h-[340px] overflow-y-auto pr-1">
-              {activity.slice(0, 7).map((act) => (
+              {activity.slice(0, 6).map((act) => (
                 <div
                   key={act.id}
                   className="flex items-start gap-3 pb-3 border-b border-[#F1F2F9] last:border-b-0 last:pb-0"
@@ -415,14 +380,14 @@ export function DashboardPage() {
             </div>
 
             <div className="pt-3 border-t border-[#EEF0FA] grid grid-cols-2 gap-2.5">
-              <Link to="/app/ndr">
-                <Button variant="secondary" size="sm" className="w-full">
-                  NDR Queue ({summary.openNdr})
+              <Link to="/app/orders">
+                <Button variant="primary" size="sm" className="w-full">
+                  Order Core
                 </Button>
               </Link>
               <Link to="/app/graph">
                 <Button variant="outline" size="sm" className="w-full">
-                  Buyer Graph
+                  Customers
                 </Button>
               </Link>
             </div>

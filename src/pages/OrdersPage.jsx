@@ -1,29 +1,28 @@
-import React, { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   PackageCheck,
   Upload,
   Plus,
-  Zap,
-  AlertTriangle,
   CheckCircle2,
   Truck,
-  PauseCircle,
   XCircle,
   Eye,
-  MessageSquare,
-  GitFork,
+  Trash2,
+  RefreshCw,
+  AlertTriangle,
   FileSpreadsheet,
+  ChevronLeft,
+  ChevronRight,
+  UserCheck,
+  Clock,
+  Edit3,
 } from 'lucide-react';
 import {
   PageHeader,
   KpiCard,
   Button,
   Tabs,
-  AttentionBadge,
   StatusBadge,
-  StoreBadge,
-  ReasonCodePill,
   Drawer,
   Modal,
   ConfirmDialog,
@@ -32,533 +31,856 @@ import {
   EmptyState,
   Hint,
 } from '../components/ui/Primitives';
+import {
+  fetchOrders,
+  fetchOrderById,
+  createOrder,
+  updateOrderMetadata,
+  transitionOrderStatus,
+  deleteOrderById,
+  importOrdersFromCsv,
+} from '../services/api/ordersApi';
+import { fetchCustomerOrders } from '../services/api/customersApi';
+import { useAuthStore, hasMinimumRole } from '../store/useAuthStore';
 import { useOrdexaStore } from '../store/useOrdexaStore';
-import { REASON_CODE_META } from '../services/scoringEngine';
-import { formatINR, formatDateTime, maskPhone } from '../utils/formatters';
+import { formatINR, formatDateTime } from '../utils/formatters';
 
-const SAMPLE_CSV = `customerName,phone,orderValue,paymentMode,line1,landmark,city,state,pincode,courier,skuName
-Meera Joshi,9829011223,2199,COD,House 18 Vaishali Nagar,,Jaipur,Rajasthan,302021,Delhivery,Saffron Glow Cream
-Karan Malhotra,9810455678,1450,Prepaid,Flat 902 DLF Phase 4,Near Galleria Market,Gurugram,Haryana,122009,BlueDart,Handwoven Cushion Pair
-Rohan Verma,9793112244,2899,COD,Sector 8 Indira Nagar,,Lucknow,Uttar Pradesh,226016,Shiprocket,Brass Dhuna Loban Burner`;
+const SAMPLE_POSTGRES_CSV = `orderNumber,customerName,customerPhone,customerEmail,productName,sku,quantity,unitPrice,discount,shippingFee,paymentMethod,paymentStatus,shippingAddress,customerNotes
+ORD-CSV-901,Meera Joshi,9829011223,meera@example.in,Saffron Glow Facial Oil,VG-SAFFRON-30,2,1099.00,100.00,50.00,COD,PENDING,"House 18 Vaishali Nagar, Jaipur, Rajasthan 302021",Call before delivery
+ORD-CSV-902,Karan Malhotra,9810455678,karan@example.in,Handwoven Linen Cushion Pair,KC-CUSHION-02,1,1450.00,0.00,0.00,PREPAID,PAID,"Flat 902 DLF Phase 4, Near Galleria Market, Gurugram 122009",Leave at security
+ORD-CSV-903,Rohan Verma,9793112244,rohan@example.in,Brass Dhuna Loban Burner,KC-BRASS-11,1,2899.00,150.00,75.00,UPI,PAID,"Sector 8 Indira Nagar, Lucknow, UP 226016",Gift wrap requested`;
+
+const STATUS_TABS = [
+  { id: 'ALL', label: 'All Orders' },
+  { id: 'CREATED', label: 'Created' },
+  { id: 'CONFIRMED', label: 'Confirmed' },
+  { id: 'PROCESSING', label: 'Processing' },
+  { id: 'SHIPPED', label: 'Shipped' },
+  { id: 'DELIVERED', label: 'Delivered' },
+  { id: 'CANCELLED', label: 'Cancelled' },
+];
 
 export function OrdersPage() {
-  const navigate = useNavigate();
-  const orders = useOrdexaStore((s) => s.orders);
-  const customers = useOrdexaStore((s) => s.customers);
-  const stores = useOrdexaStore((s) => s.stores);
-  const privacySettings = useOrdexaStore((s) => s.privacySettings);
+  const activeWorkspace = useAuthStore((s) => s.activeWorkspace);
+  const currentRole = useAuthStore((s) => s.currentRole);
   const globalSearch = useOrdexaStore((s) => s.globalSearch);
-  const selectedOrderId = useOrdexaStore((s) => s.selectedOrderId);
-  const setSelectedOrderId = useOrdexaStore((s) => s.setSelectedOrderId);
-  const setSelectedCustomerId = useOrdexaStore((s) => s.setSelectedCustomerId);
+  const addToast = useOrdexaStore((s) => s.addToast);
 
-  const simulateShopifyWebhook = useOrdexaStore((s) => s.simulateShopifyWebhook);
-  const addManualOrder = useOrdexaStore((s) => s.addManualOrder);
-  const importCsvOrders = useOrdexaStore((s) => s.importCsvOrders);
-  const approveIntervention = useOrdexaStore((s) => s.approveIntervention);
-  const overrideIntervention = useOrdexaStore((s) => s.overrideIntervention);
-  const holdOrder = useOrdexaStore((s) => s.holdOrder);
-  const cancelOrder = useOrdexaStore((s) => s.cancelOrder);
-  const dispatchOrder = useOrdexaStore((s) => s.dispatchOrder);
-  const recordDeliveryOutcome = useOrdexaStore((s) => s.recordDeliveryOutcome);
+  const canWriteOrders = hasMinimumRole(currentRole, 'OPERATOR');
+  const canDeleteOrders = hasMinimumRole(currentRole, 'MANAGER');
 
-  const bulkApproveOrders = useOrdexaStore((s) => s.bulkApproveOrders);
-  const bulkHoldOrders = useOrdexaStore((s) => s.bulkHoldOrders);
-  const bulkDispatchOrders = useOrdexaStore((s) => s.bulkDispatchOrders);
-  const bulkCancelOrders = useOrdexaStore((s) => s.bulkCancelOrders);
-
+  // Query & Pagination State
   const [statusTab, setStatusTab] = useState('ALL');
-  const [attentionFilter, setAttentionFilter] = useState('ALL');
-  const [storeFilter, setStoreFilter] = useState('ALL');
+  const [paymentFilter, setPaymentFilter] = useState('ALL');
   const [localSearch, setLocalSearch] = useState('');
-  const [selectedIds, setSelectedIds] = useState([]);
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [sortBy, setSortBy] = useState('createdAt');
+  const [sortDir, setSortDir] = useState('desc');
+  const [page, setPage] = useState(0);
+  const [pageSize] = useState(10);
 
-  const [manualModalOpen, setManualModalOpen] = useState(false);
-  const [csvModalOpen, setCsvModalOpen] = useState(false);
-  const [confirmCancelState, setConfirmCancelState] = useState({ open: false, ids: [] });
-
-  const [manualForm, setManualForm] = useState({
-    store: 'VedaGlow Botanicals',
-    customerName: '',
-    phone: '',
-    skuName: 'Kumkumadi Radiance Facial Oil',
-    orderValue: '2199',
-    paymentMode: 'COD',
-    courier: 'Delhivery',
-    line1: '',
-    landmark: '',
-    city: 'Jaipur',
-    state: 'Rajasthan',
-    pincode: '302019',
+  // Server Data State
+  const [ordersPage, setOrdersPage] = useState({
+    items: [],
+    page: 0,
+    size: 10,
+    totalElements: 0,
+    totalPages: 0,
+    hasNext: false,
   });
-  const [manualError, setManualError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const [csvText, setCsvText] = useState(SAMPLE_CSV);
+  // Order Detail Drawer State
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [inspectedDetail, setInspectedDetail] = useState(null);
+  const [statusReason, setStatusReason] = useState('');
+  const [transitioning, setTransitioning] = useState(false);
+  const [editMeta, setEditMeta] = useState({
+    shippingAddress: '',
+    billingAddress: '',
+    customerNotes: '',
+    paymentStatus: 'PENDING',
+  });
+  const [savingMeta, setSavingMeta] = useState(false);
+
+  // Customer Order History Modal
+  const [customerHistoryModal, setCustomerHistoryModal] = useState({
+    open: false,
+    loading: false,
+    data: null,
+  });
+
+  // Create Order Modal
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [creatingOrder, setCreatingOrder] = useState(false);
+  const [createError, setCreateError] = useState('');
+  const [createForm, setCreateForm] = useState({
+    orderNumber: '',
+    source: 'MANUAL',
+    customerName: '',
+    customerPhone: '',
+    customerEmail: '',
+    paymentMethod: 'COD',
+    paymentStatus: 'PENDING',
+    discount: '0',
+    shippingFee: '0',
+    shippingAddress: '',
+    billingAddress: '',
+    customerNotes: '',
+    items: [
+      {
+        productName: 'Kumkumadi Radiance Facial Oil (30ml)',
+        sku: 'VG-KUMKUM-30',
+        quantity: 1,
+        unitPrice: '1499.00',
+      },
+    ],
+  });
+
+  // CSV Import Modal
+  const [csvModalOpen, setCsvModalOpen] = useState(false);
+  const [csvText, setCsvText] = useState(SAMPLE_POSTGRES_CSV);
+  const [importingCsv, setImportingCsv] = useState(false);
   const [csvError, setCsvError] = useState('');
+  const [csvSummary, setCsvSummary] = useState(null);
 
-  const inspectedOrder = useMemo(
-    () => orders.find((o) => o.id === selectedOrderId) || orders[0] || null,
-    [orders, selectedOrderId]
-  );
+  // Delete Confirm Dialog
+  const [confirmDeleteOrder, setConfirmDeleteOrder] = useState(null);
 
-  const inspectedCustomer = useMemo(
-    () =>
-      inspectedOrder
-        ? customers.find((c) => c.id === inspectedOrder.customerId) || null
-        : null,
-    [customers, inspectedOrder]
-  );
+  const loadOrders = useCallback(async () => {
+    if (!activeWorkspace?.merchantId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const effectiveSearch = (localSearch || globalSearch || '').trim();
+      const isoFrom = fromDate ? new Date(`${fromDate}T00:00:00Z`).toISOString() : '';
+      const isoTo = toDate ? new Date(`${toDate}T23:59:59Z`).toISOString() : '';
+      const data = await fetchOrders({
+        search: effectiveSearch,
+        orderStatus: statusTab,
+        paymentStatus: paymentFilter,
+        fromDate: isoFrom,
+        toDate: isoTo,
+        page,
+        size: pageSize,
+        sortBy,
+        sortDir,
+      });
+      setOrdersPage(
+        data || {
+          items: [],
+          page: 0,
+          size: pageSize,
+          totalElements: 0,
+          totalPages: 0,
+          hasNext: false,
+        }
+      );
+    } catch (err) {
+      setError(err.message || 'Failed to load orders from PostgreSQL');
+    } finally {
+      setLoading(false);
+    }
+  }, [
+    activeWorkspace?.merchantId,
+    localSearch,
+    globalSearch,
+    statusTab,
+    paymentFilter,
+    fromDate,
+    toDate,
+    page,
+    pageSize,
+    sortBy,
+    sortDir,
+  ]);
 
-  const statusTabs = useMemo(() => {
-    const countFor = (st) => orders.filter((o) => o.status === st).length;
-    return [
-      { id: 'ALL', label: 'All Orders', count: orders.length },
-      { id: 'Pending Verification', label: 'Pending', count: countFor('Pending Verification') },
-      { id: 'Awaiting Customer', label: 'Awaiting Reply', count: countFor('Awaiting Customer') },
-      { id: 'Held for Review', label: 'Held', count: countFor('Held for Review') },
-      { id: 'Ready for Dispatch', label: 'Ready', count: countFor('Ready for Dispatch') },
-      { id: 'Dispatched', label: 'Dispatched', count: countFor('Dispatched') },
-      { id: 'Delivered', label: 'Delivered', count: countFor('Delivered') },
-      { id: 'RTO', label: 'RTO', count: countFor('RTO') },
-    ];
-  }, [orders]);
+  useEffect(() => {
+    loadOrders();
+  }, [loadOrders]);
 
-  const filteredOrders = useMemo(() => {
-    const query = (localSearch || globalSearch).trim().toLowerCase();
-    return orders.filter((o) => {
-      if (statusTab !== 'ALL' && o.status !== statusTab) return false;
-      if (attentionFilter !== 'ALL' && o.attentionLevel !== attentionFilter) return false;
-      if (storeFilter !== 'ALL' && o.store !== storeFilter) return false;
-      if (query) {
-        const hay = `${o.id} ${o.customerName} ${o.address.city} ${o.address.pincode} ${o.skuName} ${o.courier}`.toLowerCase();
-        if (!hay.includes(query)) return false;
-      }
-      return true;
-    });
-  }, [orders, statusTab, attentionFilter, storeFilter, localSearch, globalSearch]);
-
-  const kpis = useMemo(() => {
-    const highRisk = orders.filter((o) => o.attentionLevel === 'HIGH').length;
-    const readyCount = orders.filter((o) => o.status === 'Ready for Dispatch').length;
-    const activeExposure = orders
-      .filter((o) => !['Delivered', 'Cancelled'].includes(o.status) && o.attentionLevel !== 'LOW')
-      .reduce((sum, o) => sum + (o.estimatedRtoExposure || 150), 0);
-    return { highRisk, readyCount, activeExposure };
-  }, [orders]);
-
-  const toggleSelectAll = () => {
-    if (selectedIds.length === filteredOrders.length) {
-      setSelectedIds([]);
-    } else {
-      setSelectedIds(filteredOrders.map((o) => o.id));
+  const openOrderInspector = async (orderId) => {
+    setDrawerOpen(true);
+    setDetailLoading(true);
+    setStatusReason('');
+    try {
+      const detail = await fetchOrderById(orderId);
+      setInspectedDetail(detail);
+      setEditMeta({
+        shippingAddress: detail.order.shippingAddress || '',
+        billingAddress: detail.order.billingAddress || '',
+        customerNotes: detail.order.customerNotes || '',
+        paymentStatus: detail.order.paymentStatus || 'PENDING',
+      });
+    } catch (err) {
+      addToast(err.message || 'Failed to load order details', 'warning');
+      setDrawerOpen(false);
+    } finally {
+      setDetailLoading(false);
     }
   };
 
-  const toggleSelectRow = (id) => {
-    setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    );
+  const openCustomerHistory = async (customerId) => {
+    setCustomerHistoryModal({ open: true, loading: true, data: null });
+    try {
+      const detail = await fetchCustomerOrders(customerId);
+      setCustomerHistoryModal({ open: true, loading: false, data: detail });
+    } catch (err) {
+      addToast(err.message || 'Failed to load customer order history', 'warning');
+      setCustomerHistoryModal({ open: false, loading: false, data: null });
+    }
   };
 
-  const openInspector = (orderId) => {
-    setSelectedOrderId(orderId);
-    setDrawerOpen(true);
+  const handleStatusTransition = async (orderId, newStatus) => {
+    setTransitioning(true);
+    try {
+      const updated = await transitionOrderStatus(orderId, {
+        newStatus,
+        reason: statusReason.trim() || `Transitioned to ${newStatus} by operator`,
+      });
+      setInspectedDetail(updated);
+      setEditMeta((prev) => ({
+        ...prev,
+        paymentStatus: updated.order.paymentStatus,
+      }));
+      setStatusReason('');
+      addToast(`Order ${updated.order.orderNumber} moved to ${newStatus}`, 'success');
+      await loadOrders();
+    } catch (err) {
+      addToast(err.message || 'Invalid status transition', 'warning');
+    } finally {
+      setTransitioning(false);
+    }
   };
 
-  const handleManualSubmit = (e) => {
+  const handleSaveMetadata = async (e) => {
     e.preventDefault();
-    if (!manualForm.customerName.trim() || !manualForm.line1.trim() || !manualForm.city.trim()) {
-      setManualError('Buyer name, street address line, and city are required.');
+    if (!inspectedDetail?.order?.id) return;
+    setSavingMeta(true);
+    try {
+      const updated = await updateOrderMetadata(inspectedDetail.order.id, editMeta);
+      setInspectedDetail(updated);
+      addToast(`Updated metadata for ${updated.order.orderNumber}`, 'success');
+      await loadOrders();
+    } catch (err) {
+      addToast(err.message || 'Unable to update order metadata', 'warning');
+    } finally {
+      setSavingMeta(false);
+    }
+  };
+
+  const handleDeleteOrder = async () => {
+    if (!confirmDeleteOrder) return;
+    try {
+      await deleteOrderById(confirmDeleteOrder.id);
+      addToast(`Deleted order ${confirmDeleteOrder.orderNumber}`, 'info');
+      if (inspectedDetail?.order?.id === confirmDeleteOrder.id) {
+        setDrawerOpen(false);
+        setInspectedDetail(null);
+      }
+      setConfirmDeleteOrder(null);
+      await loadOrders();
+    } catch (err) {
+      addToast(err.message || 'Order deletion not allowed', 'warning');
+    }
+  };
+
+  // Create Order Modal Handlers
+  const addLineItem = () => {
+    setCreateForm((prev) => ({
+      ...prev,
+      items: [
+        ...prev.items,
+        { productName: '', sku: '', quantity: 1, unitPrice: '499.00' },
+      ],
+    }));
+  };
+
+  const updateLineItem = (idx, field, value) => {
+    setCreateForm((prev) => ({
+      ...prev,
+      items: prev.items.map((it, i) => (i === idx ? { ...it, [field]: value } : it)),
+    }));
+  };
+
+  const removeLineItem = (idx) => {
+    setCreateForm((prev) => ({
+      ...prev,
+      items: prev.items.length > 1 ? prev.items.filter((_, i) => i !== idx) : prev.items,
+    }));
+  };
+
+  const previewTotals = useMemo(() => {
+    const subtotal = createForm.items.reduce((sum, item) => {
+      const qty = Math.max(1, Number(item.quantity) || 1);
+      const price = Math.max(0, Number(item.unitPrice) || 0);
+      return sum + qty * price;
+    }, 0);
+    const discount = Math.max(0, Number(createForm.discount) || 0);
+    const shippingFee = Math.max(0, Number(createForm.shippingFee) || 0);
+    const total = Math.max(0, subtotal - discount + shippingFee);
+    return { subtotal, discount, shippingFee, total };
+  }, [createForm.items, createForm.discount, createForm.shippingFee]);
+
+  const handleCreateOrderSubmit = async (e) => {
+    e.preventDefault();
+    setCreateError('');
+
+    if (!createForm.customerName.trim() || !createForm.customerPhone.trim()) {
+      setCreateError('Customer full name and phone number are required.');
       return;
     }
-    setManualError('');
-    const created = addManualOrder(manualForm);
-    setManualModalOpen(false);
-    setManualForm((f) => ({ ...f, customerName: '', phone: '', line1: '', landmark: '' }));
-    if (created?.id) {
-      openInspector(created.id);
+    if (!createForm.shippingAddress.trim() || createForm.shippingAddress.trim().length < 5) {
+      setCreateError('Please enter a complete shipping address (at least 5 characters).');
+      return;
+    }
+    const invalidItem = createForm.items.some(
+      (it) => !it.productName.trim() || !it.sku.trim() || Number(it.quantity) < 1
+    );
+    if (invalidItem) {
+      setCreateError('Every line item requires a product name, SKU, and quantity >= 1.');
+      return;
+    }
+
+    setCreatingOrder(true);
+    try {
+      const created = await createOrder({
+        orderNumber: createForm.orderNumber.trim() || null,
+        source: createForm.source,
+        customerName: createForm.customerName.trim(),
+        customerPhone: createForm.customerPhone.trim(),
+        customerEmail: createForm.customerEmail.trim() || null,
+        paymentMethod: createForm.paymentMethod,
+        paymentStatus: createForm.paymentStatus,
+        discount: Number(createForm.discount) || 0,
+        shippingFee: Number(createForm.shippingFee) || 0,
+        currency: 'INR',
+        shippingAddress: createForm.shippingAddress.trim(),
+        billingAddress:
+          createForm.billingAddress.trim() || createForm.shippingAddress.trim(),
+        customerNotes: createForm.customerNotes.trim() || null,
+        items: createForm.items.map((it) => ({
+          productName: it.productName.trim(),
+          sku: it.sku.trim(),
+          quantity: Number(it.quantity) || 1,
+          unitPrice: Number(it.unitPrice) || 0,
+        })),
+      });
+
+      setCreateModalOpen(false);
+      setCreateForm((prev) => ({
+        ...prev,
+        orderNumber: '',
+        customerName: '',
+        customerPhone: '',
+        customerEmail: '',
+        shippingAddress: '',
+        billingAddress: '',
+        customerNotes: '',
+      }));
+      addToast(`Created order ${created.order.orderNumber} in PostgreSQL`, 'success');
+      await loadOrders();
+      setInspectedDetail(created);
+      setDrawerOpen(true);
+    } catch (err) {
+      setCreateError(err.message || 'Failed to create order');
+    } finally {
+      setCreatingOrder(false);
     }
   };
 
-  const handleCsvFileChange = (e) => {
+  // CSV Import Handlers
+  const handleCsvFileUpload = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (ev) => {
       setCsvText(String(ev.target?.result || ''));
+      setCsvSummary(null);
+      setCsvError('');
     };
     reader.readAsText(file);
   };
 
-  const handleImportCsv = () => {
-    const lines = csvText
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter(Boolean);
-    if (lines.length < 2) {
-      setCsvError('Provide a header row and at least one order row.');
-      return;
-    }
-    const headers = lines[0].split(',').map((h) => h.trim());
-    const parsedRows = lines.slice(1).map((line) => {
-      const cols = line.split(',').map((c) => c.trim());
-      const obj = {};
-      headers.forEach((h, idx) => {
-        obj[h] = cols[idx] || '';
-      });
-      return obj;
-    });
-    const valid = parsedRows.filter((r) => r.customerName);
-    if (valid.length === 0) {
-      setCsvError('Column "customerName" is required in CSV rows.');
-      return;
-    }
+  const handleImportCsvSubmit = async () => {
     setCsvError('');
-    importCsvOrders(valid);
-    setCsvModalOpen(false);
+    setCsvSummary(null);
+    if (!csvText.trim()) {
+      setCsvError('Please provide CSV content with a header row and at least one order row.');
+      return;
+    }
+    setImportingCsv(true);
+    try {
+      const summary = await importOrdersFromCsv(csvText);
+      setCsvSummary(summary);
+      addToast(
+        `CSV Import: ${summary.importedOrdersCount} imported, ${summary.failedRowsCount} failed`,
+        summary.failedRowsCount > 0 ? 'warning' : 'success'
+      );
+      await loadOrders();
+    } catch (err) {
+      setCsvError(err.message || 'CSV import failed');
+    } finally {
+      setImportingCsv(false);
+    }
   };
+
+  const kpiStats = useMemo(() => {
+    const visible = ordersPage.items || [];
+    const totalVisibleValue = visible.reduce(
+      (sum, o) => sum + (Number(o.totalAmount) || 0),
+      0
+    );
+    const activeFulfilment = visible.filter((o) =>
+      ['CREATED', 'CONFIRMED', 'PROCESSING', 'SHIPPED'].includes(o.orderStatus)
+    ).length;
+    const deliveredCount = visible.filter((o) => o.orderStatus === 'DELIVERED').length;
+    return {
+      totalElements: ordersPage.totalElements || 0,
+      totalVisibleValue,
+      activeFulfilment,
+      deliveredCount,
+    };
+  }, [ordersPage]);
 
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Operations · Pre-Dispatch Queue"
+        eyebrow={`PostgreSQL Order Core · ${activeWorkspace?.businessName || 'Workspace'}`}
         title="Order"
         accentWord="Management"
-        subtitle="Score incoming COD & prepaid orders with deterministic reason codes, import live CSV batches, and run proportionate verification."
+        subtitle="Create, filter, transition, and import merchant-scoped orders persisted in PostgreSQL with full status audit history."
         icon={PackageCheck}
         iconTone="peri"
         actions={
           <>
-            <Button variant="outline" size="sm" onClick={() => setCsvModalOpen(true)}>
-              <Upload className="w-3.5 h-3.5 text-[#7584D6]" /> CSV Import (Live)
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={loadOrders}
+              data-testid="orders-refresh-btn"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-[#7584D6] ${loading ? 'animate-spin' : ''}`} />
+              Refresh
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setManualModalOpen(true)}>
-              <Plus className="w-3.5 h-3.5 text-[#7584D6]" /> Manual Order
-            </Button>
-            <Button variant="primary" size="sm" onClick={simulateShopifyWebhook}>
-              <Zap className="w-3.5 h-3.5" /> Simulate Webhook
-            </Button>
+            {canWriteOrders && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  data-testid="open-csv-import-btn"
+                  onClick={() => {
+                    setCsvSummary(null);
+                    setCsvError('');
+                    setCsvModalOpen(true);
+                  }}
+                >
+                  <Upload className="w-3.5 h-3.5 text-[#7584D6]" /> CSV Import
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  data-testid="open-create-order-btn"
+                  onClick={() => {
+                    setCreateError('');
+                    setCreateModalOpen(true);
+                  }}
+                >
+                  <Plus className="w-3.5 h-3.5" /> Create Order
+                </Button>
+              </>
+            )}
           </>
         }
       />
 
-      {/* Top Rescale KPIs */}
+      {/* Top KPI Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
         <KpiCard
-          title="Total Workspace Orders"
-          value={String(orders.length)}
-          delta={`${filteredOrders.length} Shown`}
+          title="Total Matching Orders"
+          value={String(kpiStats.totalElements)}
+          delta={`Page ${ordersPage.page + 1}`}
+          subtitle="Merchant-scoped PostgreSQL records"
           icon={PackageCheck}
           accent="peri"
         />
         <KpiCard
-          title="High Attention COD"
-          value={String(kpis.highRisk)}
-          delta="Needs Check"
-          icon={AlertTriangle}
+          title="In-Flight Fulfilment"
+          value={String(kpiStats.activeFulfilment)}
+          delta="Active Page"
+          subtitle="Created, Confirmed, Processing & Shipped"
+          icon={Clock}
           accent="coral"
         />
         <KpiCard
-          title="Ready for Dispatch"
-          value={String(kpis.readyCount)}
-          delta="Verified"
+          title="Delivered on Page"
+          value={String(kpiStats.deliveredCount)}
+          delta="Completed"
+          subtitle="Controlled lifecycle verified"
           icon={CheckCircle2}
           accent="emerald"
         />
         <KpiCard
-          title="Freight Exposure Flagged"
-          value={formatINR(kpis.activeExposure)}
-          delta="Protected"
+          title="Page Order Volume"
+          value={formatINR(kpiStats.totalVisibleValue)}
+          delta="BigDecimal"
+          subtitle="Server-calculated order totals"
           icon={Truck}
           accent="pink"
         />
       </div>
 
-      {/* Filters + Tabs Card */}
+      {/* Filter & Table Card */}
       <div className="rescale-card p-5 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <Tabs items={statusTabs} value={statusTab} onChange={setStatusTab} />
+          <Tabs
+            items={STATUS_TABS}
+            value={statusTab}
+            onChange={(val) => {
+              setStatusTab(val);
+              setPage(0);
+            }}
+          />
 
-          <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2">
             <input
               type="text"
+              data-testid="orders-search-input"
               value={localSearch}
-              onChange={(e) => setLocalSearch(e.target.value)}
-              placeholder="Filter ID, buyer, PIN, SKU…"
-              className={`${inputClass} sm:w-56`}
+              onChange={(e) => {
+                setLocalSearch(e.target.value);
+                setPage(0);
+              }}
+              placeholder="Search order #, buyer, phone…"
+              className={`${inputClass} sm:w-52`}
             />
 
             <select
-              value={attentionFilter}
-              onChange={(e) => setAttentionFilter(e.target.value)}
-              aria-label="Filter by attention level"
+              value={paymentFilter}
+              data-testid="orders-payment-filter"
+              onChange={(e) => {
+                setPaymentFilter(e.target.value);
+                setPage(0);
+              }}
+              aria-label="Filter by payment status"
               className={`${inputClass} sm:w-40`}
             >
-              <option value="ALL">All Attention</option>
-              <option value="HIGH">High Attention</option>
-              <option value="MEDIUM">Medium Attention</option>
-              <option value="LOW">Low Attention</option>
+              <option value="ALL">All Payments</option>
+              <option value="PENDING">Pending</option>
+              <option value="PAID">Paid</option>
+              <option value="PARTIALLY_PAID">Partially Paid</option>
+              <option value="REFUNDED">Refunded</option>
+              <option value="FAILED">Failed</option>
             </select>
 
+            <input
+              type="date"
+              value={fromDate}
+              onChange={(e) => {
+                setFromDate(e.target.value);
+                setPage(0);
+              }}
+              aria-label="From date"
+              className={`${inputClass} sm:w-36`}
+            />
+            <input
+              type="date"
+              value={toDate}
+              onChange={(e) => {
+                setToDate(e.target.value);
+                setPage(0);
+              }}
+              aria-label="To date"
+              className={`${inputClass} sm:w-36`}
+            />
+
             <select
-              value={storeFilter}
-              onChange={(e) => setStoreFilter(e.target.value)}
-              aria-label="Filter by store"
-              className={`${inputClass} sm:w-48`}
+              value={`${sortBy}:${sortDir}`}
+              onChange={(e) => {
+                const [field, dir] = e.target.value.split(':');
+                setSortBy(field);
+                setSortDir(dir);
+                setPage(0);
+              }}
+              aria-label="Sort orders"
+              className={`${inputClass} sm:w-44`}
             >
-              <option value="ALL">All Channels</option>
-              {stores.map((st) => (
-                <option key={st.id} value={st.name}>
-                  {st.name}
-                </option>
-              ))}
+              <option value="createdAt:desc">Newest First</option>
+              <option value="createdAt:asc">Oldest First</option>
+              <option value="totalAmount:desc">Amount: High → Low</option>
+              <option value="totalAmount:asc">Amount: Low → High</option>
+              <option value="orderNumber:asc">Order # (A–Z)</option>
             </select>
           </div>
         </div>
 
-        {/* Multi-Select Bulk Action Bar */}
-        {selectedIds.length > 0 && (
-          <div className="rounded-[18px] bg-[#EEF0FA] border border-[#CFD5F4] px-4 py-3 flex flex-wrap items-center justify-between gap-3 animate-fade-up">
-            <span className="font-display text-[13px] font-bold text-[#465478]">
-              {selectedIds.length} order(s) selected
-            </span>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="primary"
-                size="xs"
-                onClick={() => {
-                  bulkApproveOrders(selectedIds);
-                  setSelectedIds([]);
-                }}
-              >
-                Approve Interventions
-              </Button>
-              <Button
-                variant="outline"
-                size="xs"
-                onClick={() => {
-                  bulkDispatchOrders(selectedIds);
-                  setSelectedIds([]);
-                }}
-              >
-                Manifest Ready
-              </Button>
-              <Button
-                variant="outline"
-                size="xs"
-                onClick={() => {
-                  bulkHoldOrders(selectedIds);
-                  setSelectedIds([]);
-                }}
-              >
-                Hold Review
-              </Button>
-              <Button
-                variant="danger"
-                size="xs"
-                onClick={() => setConfirmCancelState({ open: true, ids: selectedIds })}
-              >
-                Cancel Pre-Dispatch
-              </Button>
+        {/* Error Banner */}
+        {error && (
+          <div
+            role="alert"
+            className="rounded-[16px] bg-[#FFF0F2] border border-[#FECDD6] px-4 py-3 flex items-center justify-between gap-3 text-[12.5px] text-[#D13B56] font-display font-semibold"
+          >
+            <div className="flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+              <span>{error}</span>
             </div>
+            <Button variant="outline" size="xs" onClick={loadOrders}>
+              Retry
+            </Button>
           </div>
         )}
 
-        {/* Orders Table */}
-        {filteredOrders.length === 0 ? (
+        {/* Loading / Empty / Data Table */}
+        {loading && ordersPage.items.length === 0 ? (
+          <div className="py-14 text-center text-[13.5px] font-display font-semibold text-[#6E7896]">
+            Loading merchant orders from PostgreSQL…
+          </div>
+        ) : ordersPage.items.length === 0 ? (
           <EmptyState
             icon={PackageCheck}
-            title="No matching orders"
-            description="Adjust your status tab or attention filter, or simulate a fresh Shopify webhook order."
+            title="No orders found in this merchant workspace"
+            description="Create a new order manually, import a CSV batch, or clear active search filters."
             action={
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setStatusTab('ALL');
-                  setAttentionFilter('ALL');
-                  setStoreFilter('ALL');
-                  setLocalSearch('');
-                }}
-              >
-                Clear All Filters
-              </Button>
+              <div className="flex flex-wrap items-center justify-center gap-2.5">
+                {canWriteOrders && (
+                  <>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={() => setCreateModalOpen(true)}
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Create First Order
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCsvModalOpen(true)}
+                    >
+                      <Upload className="w-3.5 h-3.5" /> Import CSV Batch
+                    </Button>
+                  </>
+                )}
+                {(statusTab !== 'ALL' || paymentFilter !== 'ALL' || localSearch || fromDate || toDate) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setStatusTab('ALL');
+                      setPaymentFilter('ALL');
+                      setLocalSearch('');
+                      setFromDate('');
+                      setToDate('');
+                      setPage(0);
+                    }}
+                  >
+                    Reset Filters
+                  </Button>
+                )}
+              </div>
             }
           />
         ) : (
-          <div className="overflow-x-auto rounded-[18px] border border-[#EEF0FA]">
-            <table className="w-full text-left border-collapse">
-              <thead>
-                <tr className="bg-[#F9FAFB] border-b border-[#EEF0FA] text-[11px] font-display font-bold uppercase tracking-[0.12em] text-[#8891AA]">
-                  <th className="py-3.5 pl-4 pr-2 w-10">
-                    <input
-                      type="checkbox"
-                      checked={
-                        filteredOrders.length > 0 &&
-                        selectedIds.length === filteredOrders.length
-                      }
-                      onChange={toggleSelectAll}
-                      aria-label="Select all visible orders"
-                      className="rounded border-[#C5CAEC] text-[#7584D6] focus:ring-[#7584D6]"
-                    />
-                  </th>
-                  <th className="py-3.5 px-3">Order &amp; Store</th>
-                  <th className="py-3.5 px-3">Buyer &amp; Destination</th>
-                  <th className="py-3.5 px-3">Cart &amp; Mode</th>
-                  <th className="py-3.5 px-3">RTO Attention &amp; Signals</th>
-                  <th className="py-3.5 px-3">Recommended Action</th>
-                  <th className="py-3.5 px-3">Status</th>
-                  <th className="py-3.5 pr-4 pl-3 text-right">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[#F1F2F9] text-[13px] bg-white">
-                {filteredOrders.map((order) => {
-                  const checked = selectedIds.includes(order.id);
-                  const displayPhone = privacySettings.maskPhoneByDefault
-                    ? maskPhone(order.phone)
-                    : `+91 ${order.phone}`;
-                  return (
+          <>
+            <div className="overflow-x-auto rounded-[18px] border border-[#EEF0FA]">
+              <table className="w-full text-left border-collapse" data-testid="orders-table">
+                <thead>
+                  <tr className="bg-[#F9FAFB] border-b border-[#EEF0FA] text-[11px] font-display font-bold uppercase tracking-[0.12em] text-[#8891AA]">
+                    <th className="py-3.5 px-4">Order # &amp; Source</th>
+                    <th className="py-3.5 px-4">Customer</th>
+                    <th className="py-3.5 px-4">Items &amp; Address</th>
+                    <th className="py-3.5 px-4">Total &amp; Payment</th>
+                    <th className="py-3.5 px-4">Order Status</th>
+                    <th className="py-3.5 px-4">Created</th>
+                    <th className="py-3.5 px-4 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#F1F2F9] text-[13px] bg-white">
+                  {ordersPage.items.map((order) => (
                     <tr
                       key={order.id}
-                      className={`hover:bg-[#F9FAFB] transition-colors ${
-                        checked ? 'bg-[#F5F6FD]' : ''
-                      }`}
+                      data-testid={`order-row-${order.orderNumber}`}
+                      className="hover:bg-[#F9FAFB] transition-colors"
                     >
-                      <td className="py-3.5 pl-4 pr-2">
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={() => toggleSelectRow(order.id)}
-                          aria-label={`Select ${order.id}`}
-                          className="rounded border-[#C5CAEC] text-[#7584D6] focus:ring-[#7584D6]"
-                        />
-                      </td>
-                      <td className="py-3.5 px-3">
+                      <td className="py-3.5 px-4">
                         <button
                           type="button"
-                          onClick={() => openInspector(order.id)}
-                          className="font-display font-extrabold text-[#465478] hover:text-[#7584D6]"
+                          onClick={() => openOrderInspector(order.id)}
+                          className="font-display font-extrabold text-[#465478] hover:text-[#7584D6] block"
                         >
-                          {order.id}
+                          {order.orderNumber}
                         </button>
-                        <div className="mt-1">
-                          <StoreBadge store={order.store} />
-                        </div>
+                        <span className="inline-block mt-1 px-2 py-0.5 rounded-full text-[10px] font-display font-bold uppercase bg-[#F1F2F9] text-[#545C9E] border border-[#DFE1F5]">
+                          {order.source}
+                        </span>
                       </td>
-                      <td className="py-3.5 px-3">
-                        <div className="font-display font-semibold text-[#465478]">
+
+                      <td className="py-3.5 px-4">
+                        <button
+                          type="button"
+                          onClick={() => openCustomerHistory(order.customerId)}
+                          className="font-display font-semibold text-[#465478] hover:text-[#7584D6] text-left"
+                        >
                           {order.customerName}
-                        </div>
-                        <div className="text-[11.5px] text-[#8891AA]">
-                          {displayPhone} · {order.address.city} ({order.address.pincode})
+                        </button>
+                        <div className="text-[11.5px] text-[#8891AA] font-mono">
+                          +91 {order.customerPhone}
                         </div>
                       </td>
-                      <td className="py-3.5 px-3">
-                        <div className="font-display font-bold text-[#465478] num">
-                          {formatINR(order.orderValue)}{' '}
-                          <span className="text-[11px] font-semibold text-[#7584D6]">
-                            ({order.paymentMode})
+
+                      <td className="py-3.5 px-4">
+                        <div className="font-display font-semibold text-[#465478] truncate max-w-[230px]">
+                          {order.primaryProductSummary} ({order.itemCount} unit
+                          {order.itemCount === 1 ? '' : 's'})
+                        </div>
+                        <div className="text-[11.5px] text-[#8891AA] truncate max-w-[230px]">
+                          {order.shippingAddress}
+                        </div>
+                      </td>
+
+                      <td className="py-3.5 px-4">
+                        <div className="font-display font-extrabold text-[#465478] num">
+                          {formatINR(order.totalAmount, true)}
+                        </div>
+                        <div className="mt-1 flex items-center gap-1.5">
+                          <span className="text-[10.5px] font-display font-bold text-[#545C9E]">
+                            {order.paymentMethod}
                           </span>
-                        </div>
-                        <div className="text-[11.5px] text-[#8891AA] truncate max-w-[180px]">
-                          {order.skuName}
+                          <StatusBadge status={order.paymentStatus} />
                         </div>
                       </td>
-                      <td className="py-3.5 px-3">
-                        <AttentionBadge level={order.attentionLevel} />
-                        <div className="mt-1.5 flex flex-wrap gap-1">
-                          {(order.reasonCodes || []).slice(0, 2).map((code) => (
-                            <ReasonCodePill key={code} code={code} />
-                          ))}
-                        </div>
+
+                      <td className="py-3.5 px-4">
+                        <StatusBadge status={order.orderStatus} />
                       </td>
-                      <td className="py-3.5 px-3">
-                        <div className="font-display text-[12.5px] font-bold text-[#465478]">
-                          {order.recommendedIntervention}
-                        </div>
-                        <div className="text-[11px] text-[#8891AA] num">
-                          Exposure {formatINR(order.estimatedRtoExposure)} · Cost ₹
-                          {Number(order.interventionCost || 0).toFixed(2)}
-                        </div>
+
+                      <td className="py-3.5 px-4 text-[11.5px] text-[#7C86A2]">
+                        {formatDateTime(order.createdAt)}
                       </td>
-                      <td className="py-3.5 px-3">
-                        <StatusBadge status={order.status} />
-                      </td>
-                      <td className="py-3.5 pr-4 pl-3 text-right">
+
+                      <td className="py-3.5 px-4 text-right">
                         <div className="inline-flex items-center gap-1.5">
-                          {['Pending Verification', 'Held for Review'].includes(order.status) && (
+                          {canWriteOrders && order.orderStatus === 'CREATED' && (
                             <Button
                               variant="primary"
                               size="xs"
-                              onClick={() => approveIntervention(order.id)}
+                              onClick={() =>
+                                handleStatusTransition(order.id, 'CONFIRMED')
+                              }
                             >
-                              Approve
+                              Confirm
                             </Button>
                           )}
-                          {order.status === 'Ready for Dispatch' && (
+                          {canWriteOrders && order.orderStatus === 'CONFIRMED' && (
                             <Button
                               variant="outline"
                               size="xs"
-                              onClick={() => dispatchOrder(order.id)}
+                              onClick={() =>
+                                handleStatusTransition(order.id, 'PROCESSING')
+                              }
                             >
-                              Manifest
+                              Process
+                            </Button>
+                          )}
+                          {canWriteOrders && order.orderStatus === 'PROCESSING' && (
+                            <Button
+                              variant="outline"
+                              size="xs"
+                              onClick={() =>
+                                handleStatusTransition(order.id, 'SHIPPED')
+                              }
+                            >
+                              Ship
                             </Button>
                           )}
                           <Button
                             variant="ghost"
                             size="xs"
-                            onClick={() => openInspector(order.id)}
+                            data-testid={`inspect-order-btn-${order.orderNumber}`}
+                            onClick={() => openOrderInspector(order.id)}
                           >
-                            <Eye className="w-3.5 h-3.5" /> Inspect
+                            <Eye className="w-3.5 h-3.5" /> Details
                           </Button>
                         </div>
                       </td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination Footer */}
+            <div className="pt-2 flex flex-wrap items-center justify-between gap-3 text-[12.5px] text-[#6E7896]">
+              <div>
+                Showing page <strong>{ordersPage.page + 1}</strong> of{' '}
+                <strong>{Math.max(1, ordersPage.totalPages)}</strong> (
+                <strong>{ordersPage.totalElements}</strong> total orders)
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="xs"
+                  disabled={ordersPage.page <= 0}
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" /> Previous
+                </Button>
+                <Button
+                  variant="outline"
+                  size="xs"
+                  disabled={!ordersPage.hasNext}
+                  onClick={() => setPage((p) => p + 1)}
+                >
+                  Next <ChevronRight className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            </div>
+          </>
         )}
       </div>
 
-      {/* Order Detail Slide-Over Drawer */}
+      {/* Order Detail & Lifecycle Slide-Over Drawer */}
       <Drawer
-        open={drawerOpen && Boolean(inspectedOrder)}
+        open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         widthClass="max-w-xl"
         title={
-          inspectedOrder ? (
+          inspectedDetail?.order ? (
             <div className="flex items-center gap-2.5 flex-wrap">
               <span className="font-display text-[18px] font-extrabold text-[#465478]">
-                {inspectedOrder.id}
+                {inspectedDetail.order.orderNumber}
               </span>
-              <AttentionBadge level={inspectedOrder.attentionLevel} />
-              <StatusBadge status={inspectedOrder.status} />
+              <StatusBadge status={inspectedDetail.order.orderStatus} />
+              <StatusBadge status={inspectedDetail.order.paymentStatus} />
             </div>
           ) : (
             'Order Details'
           )
         }
         subtitle={
-          inspectedOrder
-            ? `${inspectedOrder.customerName} · ${inspectedOrder.store} · ${inspectedOrder.courier}`
-            : ''
+          inspectedDetail?.order
+            ? `${inspectedDetail.order.customerName} · Source: ${inspectedDetail.order.source} · Created ${formatDateTime(inspectedDetail.order.createdAt)}`
+            : 'Loading order details…'
         }
         footer={
-          inspectedOrder && (
+          inspectedDetail?.order && (
             <div className="w-full flex flex-wrap items-center justify-between gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setDrawerOpen(false);
-                  navigate('/app/rescue');
-                }}
-              >
-                <MessageSquare className="w-3.5 h-3.5 text-[#7584D6]" /> Open in WhatsApp Sandbox
-              </Button>
+              {canDeleteOrders &&
+              ['CREATED', 'CANCELLED'].includes(inspectedDetail.order.orderStatus) ? (
+                <Button
+                  variant="danger"
+                  size="sm"
+                  onClick={() => setConfirmDeleteOrder(inspectedDetail.order)}
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Delete Order
+                </Button>
+              ) : (
+                <span className="text-[11.5px] text-[#8891AA]">
+                  Only CREATED or CANCELLED orders can be deleted.
+                </span>
+              )}
               <Button variant="secondary" size="sm" onClick={() => setDrawerOpen(false)}>
                 Close
               </Button>
@@ -566,175 +888,218 @@ export function OrdersPage() {
           )
         }
       >
-        {inspectedOrder && (
+        {detailLoading || !inspectedDetail ? (
+          <div className="py-12 text-center text-[13px] text-[#7C86A2]">
+            Loading order details from PostgreSQL…
+          </div>
+        ) : (
           <div className="space-y-6">
-            {/* Risk Explanation Box */}
+            {/* Controlled Lifecycle State Transitions */}
             <div className="rounded-[20px] bg-[#F4F5FC] border border-[#E3E6FA] p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-display font-bold uppercase tracking-[0.12em] text-[#7584D6]">
-                  Rules-Based Risk Explanation
+                  Controlled Lifecycle Transitions
                 </span>
-                <span className="font-mono text-[11.5px] font-bold text-[#545C9E] num">
-                  Score: {inspectedOrder.riskPoints ?? 0} pts
+                <span className="font-mono text-[11px] font-bold text-[#545C9E]">
+                  Current: {inspectedDetail.order.orderStatus}
                 </span>
               </div>
-              <p className="text-[13px] text-[#465478] leading-relaxed">
-                {inspectedOrder.explanation}
-              </p>
-              {(inspectedOrder.reasonCodes || []).length > 0 && (
-                <div className="space-y-2 pt-2 border-t border-[#DFE1F5]">
-                  {inspectedOrder.reasonCodes.map((code) => (
-                    <div key={code} className="text-[12px]">
-                      <ReasonCodePill code={code} />
-                      <span className="text-[#6E7896] ml-2">
-                        {REASON_CODE_META[code]?.description || code}
-                      </span>
-                    </div>
-                  ))}
-                </div>
+
+              {(inspectedDetail.order.allowedNextStatuses || []).length === 0 ? (
+                <p className="text-[12.5px] text-[#6E7896]">
+                  This order is in a terminal state (
+                  <strong>{inspectedDetail.order.orderStatus}</strong>) and cannot transition further.
+                </p>
+              ) : canWriteOrders ? (
+                <>
+                  <input
+                    type="text"
+                    value={statusReason}
+                    onChange={(e) => setStatusReason(e.target.value)}
+                    placeholder="Optional status transition note / reason…"
+                    className={`${inputClass} bg-white`}
+                  />
+                  <div className="flex flex-wrap gap-2">
+                    {inspectedDetail.order.allowedNextStatuses.map((nextSt) => (
+                      <Button
+                        key={nextSt}
+                        variant={nextSt === 'CANCELLED' ? 'danger' : 'primary'}
+                        size="xs"
+                        loading={transitioning}
+                        data-testid={`transition-status-btn-${nextSt}`}
+                        onClick={() =>
+                          handleStatusTransition(inspectedDetail.order.id, nextSt)
+                        }
+                      >
+                        {nextSt === 'CANCELLED' ? (
+                          <XCircle className="w-3.5 h-3.5" />
+                        ) : (
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                        )}
+                        Move to {nextSt}
+                      </Button>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p className="text-[12px] text-[#8891AA]">
+                  Your role ({currentRole}) has read-only access to order status transitions.
+                </p>
               )}
             </div>
 
-            {/* Buyer & Address Summary */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="rounded-[18px] border border-[#DFE1F5] p-4">
+            {/* Customer Summary & Order History Button */}
+            <div className="rounded-[18px] border border-[#DFE1F5] p-4 flex items-center justify-between gap-3">
+              <div>
                 <div className="text-[11px] font-display font-bold uppercase tracking-[0.12em] text-[#8891AA]">
-                  Delivery Address
+                  Merchant-Scoped Customer
                 </div>
-                <div className="mt-1.5 font-display text-[13.5px] font-bold text-[#465478]">
-                  {inspectedOrder.address.line1}
+                <div className="mt-1 font-display text-[14.5px] font-bold text-[#465478]">
+                  {inspectedDetail.customer.fullName}
                 </div>
-                <div className="text-[12.5px] text-[#6E7896] mt-0.5">
-                  {inspectedOrder.address.landmark ? (
-                    <span className="text-[#17825B] font-semibold">
-                      Landmark: {inspectedOrder.address.landmark}
-                    </span>
-                  ) : (
-                    <span className="text-[#E05328] font-semibold">Missing Landmark</span>
-                  )}
+                <div className="text-[12px] text-[#6E7896]">
+                  +91 {inspectedDetail.customer.phoneNumber}
+                  {inspectedDetail.customer.email ? ` · ${inspectedDetail.customer.email}` : ''}
                 </div>
-                <div className="text-[12px] text-[#8891AA] mt-1">
-                  {inspectedOrder.address.city}, {inspectedOrder.address.state} —{' '}
-                  {inspectedOrder.address.pincode}
+                <div className="text-[11.5px] text-[#545C9E] font-semibold mt-1">
+                  {inspectedDetail.customer.totalOrders} total order(s) · Lifetime Spend{' '}
+                  {formatINR(inspectedDetail.customer.totalSpent, true)}
                 </div>
               </div>
+              <Button
+                variant="outline"
+                size="xs"
+                onClick={() => openCustomerHistory(inspectedDetail.customer.id)}
+              >
+                <UserCheck className="w-3.5 h-3.5 text-[#7584D6]" /> Order History
+              </Button>
+            </div>
 
-              <div className="rounded-[18px] border border-[#DFE1F5] p-4 flex flex-col justify-between">
-                <div>
-                  <div className="text-[11px] font-display font-bold uppercase tracking-[0.12em] text-[#8891AA]">
-                    Merchant-Scoped Buyer Profile
-                  </div>
-                  <div className="mt-1.5 font-display text-[13.5px] font-bold text-[#465478]">
-                    {inspectedOrder.customerName}
-                  </div>
-                  {inspectedCustomer && (
-                    <div className="text-[12px] text-[#6E7896] mt-1">
-                      {inspectedCustomer.successfulDeliveries} Delivered ·{' '}
-                      {inspectedCustomer.previousRtos} Prior RTOs ·{' '}
-                      {inspectedCustomer.responsiveness}
-                    </div>
-                  )}
-                </div>
-                {inspectedCustomer && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedCustomerId(inspectedCustomer.id);
-                      setDrawerOpen(false);
-                      navigate('/app/graph');
-                    }}
-                    className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-display font-bold text-[#7584D6] hover:text-[#545C9E]"
+            {/* Line Items & Server-Calculated Totals */}
+            <div className="rounded-[18px] border border-[#DFE1F5] overflow-hidden">
+              <div className="px-4 py-3 bg-[#F9FAFB] border-b border-[#EEF0FA] font-display text-[12px] font-bold text-[#465478]">
+                Order Items ({inspectedDetail.items.length})
+              </div>
+              <div className="divide-y divide-[#F1F2F9]">
+                {inspectedDetail.items.map((item) => (
+                  <div
+                    key={item.id}
+                    className="px-4 py-3 flex items-center justify-between gap-3 text-[12.5px]"
                   >
-                    <GitFork className="w-3.5 h-3.5" /> View in Customer Graph
-                  </button>
+                    <div>
+                      <div className="font-display font-bold text-[#465478]">
+                        {item.productName}
+                      </div>
+                      <div className="text-[11px] font-mono text-[#8891AA]">
+                        SKU: {item.sku} · {item.quantity} × {formatINR(item.unitPrice, true)}
+                      </div>
+                    </div>
+                    <div className="font-display font-extrabold text-[#465478] num">
+                      {formatINR(item.totalPrice, true)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="px-4 py-3 bg-[#F9FAFB] border-t border-[#EEF0FA] space-y-1 text-[12px]">
+                <div className="flex justify-between text-[#6E7896]">
+                  <span>Subtotal</span>
+                  <span className="num">{formatINR(inspectedDetail.order.subtotal, true)}</span>
+                </div>
+                <div className="flex justify-between text-[#6E7896]">
+                  <span>Discount</span>
+                  <span className="num">−{formatINR(inspectedDetail.order.discount, true)}</span>
+                </div>
+                <div className="flex justify-between text-[#6E7896]">
+                  <span>Shipping Fee</span>
+                  <span className="num">+{formatINR(inspectedDetail.order.shippingFee, true)}</span>
+                </div>
+                <div className="flex justify-between font-display text-[14px] font-extrabold text-[#465478] pt-1 border-t border-[#E3E6FA]">
+                  <span>Total ({inspectedDetail.order.paymentMethod})</span>
+                  <span className="num">{formatINR(inspectedDetail.order.totalAmount, true)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Editable Metadata Form */}
+            <form
+              onSubmit={handleSaveMetadata}
+              className="rounded-[18px] border border-[#DFE1F5] p-4 space-y-3"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-display font-bold uppercase tracking-[0.12em] text-[#8891AA]">
+                  Shipping, Billing &amp; Payment Metadata
+                </span>
+                {canWriteOrders && (
+                  <Button type="submit" variant="outline" size="xs" loading={savingMeta}>
+                    <Edit3 className="w-3 h-3" /> Save Changes
+                  </Button>
                 )}
               </div>
-            </div>
-
-            {/* Workflow Lifecycle Controls */}
-            <div className="rounded-[18px] border border-[#DFE1F5] p-4 space-y-3">
-              <div className="text-[11px] font-display font-bold uppercase tracking-[0.12em] text-[#8891AA]">
-                Workflow Actions &amp; Outcomes
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  variant="primary"
-                  size="xs"
-                  onClick={() => approveIntervention(inspectedOrder.id)}
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Approve ({inspectedOrder.recommendedIntervention})
-                </Button>
-                <Button
-                  variant="outline"
-                  size="xs"
-                  onClick={() =>
-                    overrideIntervention(
-                      inspectedOrder.id,
-                      'Ready for Dispatch',
-                      'Merchant manual override to Ready for Dispatch'
-                    )
+              <Field label="Shipping Address">
+                <input
+                  type="text"
+                  value={editMeta.shippingAddress}
+                  disabled={!canWriteOrders}
+                  onChange={(e) =>
+                    setEditMeta({ ...editMeta, shippingAddress: e.target.value })
                   }
-                >
-                  Override → Ready
-                </Button>
-                <Button
-                  variant="outline"
-                  size="xs"
-                  onClick={() => dispatchOrder(inspectedOrder.id)}
-                >
-                  <Truck className="w-3.5 h-3.5" /> Manifest Courier
-                </Button>
-                <Button
-                  variant="outline"
-                  size="xs"
-                  onClick={() => holdOrder(inspectedOrder.id)}
-                >
-                  <PauseCircle className="w-3.5 h-3.5" /> Hold Order
-                </Button>
-                <Button
-                  variant="success"
-                  size="xs"
-                  onClick={() => recordDeliveryOutcome(inspectedOrder.id, 'Delivered')}
-                >
-                  Mark Delivered
-                </Button>
-                <Button
-                  variant="outline"
-                  size="xs"
-                  onClick={() => recordDeliveryOutcome(inspectedOrder.id, 'NDR Open')}
-                >
-                  Trigger NDR
-                </Button>
-                <Button
-                  variant="danger"
-                  size="xs"
-                  onClick={() =>
-                    setConfirmCancelState({ open: true, ids: [inspectedOrder.id] })
-                  }
-                >
-                  <XCircle className="w-3.5 h-3.5" /> Cancel Pre-Dispatch
-                </Button>
+                  className={inputClass}
+                />
+              </Field>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Field label="Payment Status">
+                  <select
+                    value={editMeta.paymentStatus}
+                    disabled={!canWriteOrders}
+                    onChange={(e) =>
+                      setEditMeta({ ...editMeta, paymentStatus: e.target.value })
+                    }
+                    className={inputClass}
+                  >
+                    <option value="PENDING">PENDING</option>
+                    <option value="PAID">PAID</option>
+                    <option value="PARTIALLY_PAID">PARTIALLY_PAID</option>
+                    <option value="REFUNDED">REFUNDED</option>
+                    <option value="FAILED">FAILED</option>
+                  </select>
+                </Field>
+                <Field label="Customer Notes">
+                  <input
+                    type="text"
+                    value={editMeta.customerNotes}
+                    disabled={!canWriteOrders}
+                    onChange={(e) =>
+                      setEditMeta({ ...editMeta, customerNotes: e.target.value })
+                    }
+                    placeholder="Delivery instructions…"
+                    className={inputClass}
+                  />
+                </Field>
               </div>
-            </div>
+            </form>
 
-            {/* Order Audit Trail */}
+            {/* Immutable Order Status History */}
             <div>
               <div className="text-[11px] font-display font-bold uppercase tracking-[0.12em] text-[#8891AA] mb-2.5">
-                Order Event Timeline
+                Order Status Audit History ({inspectedDetail.statusHistory.length})
               </div>
-              <div className="space-y-2.5">
-                {(inspectedOrder.history || []).map((ev, idx) => (
+              <div className="space-y-2">
+                {inspectedDetail.statusHistory.map((h) => (
                   <div
-                    key={`${ev.timestamp}-${idx}`}
+                    key={h.id}
                     className="rounded-[14px] bg-[#F9FAFB] border border-[#EEF0FA] px-3.5 py-2.5 text-[12px]"
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-display font-bold text-[#465478]">{ev.type}</span>
+                      <span className="font-display font-bold text-[#465478]">
+                        {h.previousStatus ? `${h.previousStatus} → ${h.newStatus}` : `Created (${h.newStatus})`}
+                      </span>
                       <span className="text-[11px] text-[#9AA3BA]">
-                        {formatDateTime(ev.timestamp)}
+                        {formatDateTime(h.createdAt)}
                       </span>
                     </div>
-                    <p className="text-[#6E7896] mt-0.5">{ev.detail}</p>
+                    <div className="text-[#6E7896] mt-0.5">
+                      {h.reason} · <span className="text-[#545C9E] font-semibold">by {h.changedBy}</span>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -743,170 +1108,293 @@ export function OrdersPage() {
         )}
       </Drawer>
 
-      {/* Manual Order Modal */}
+      {/* Create Order Modal */}
       <Modal
-        open={manualModalOpen}
-        onClose={() => setManualModalOpen(false)}
-        title="Create Manual Order"
-        subtitle="Scores the order immediately through ORDEXA's rules-based RTO risk engine"
+        open={createModalOpen}
+        onClose={() => setCreateModalOpen(false)}
+        title="Create New Order (PostgreSQL)"
+        subtitle="Creates or reuses a merchant-scoped customer and calculates BigDecimal order totals on the server"
+        widthClass="max-w-3xl"
         footer={
           <>
-            <Button variant="outline" size="sm" onClick={() => setManualModalOpen(false)}>
+            <Button variant="outline" size="sm" onClick={() => setCreateModalOpen(false)}>
               Cancel
             </Button>
-            <Button variant="primary" size="sm" onClick={handleManualSubmit}>
-              Create &amp; Score Order
+            <Button
+              variant="primary"
+              size="sm"
+              loading={creatingOrder}
+              data-testid="create-order-submit-btn"
+              onClick={handleCreateOrderSubmit}
+            >
+              Create Order ({formatINR(previewTotals.total, true)})
             </Button>
           </>
         }
       >
-        <form onSubmit={handleManualSubmit} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {manualError && (
-            <div className="sm:col-span-2 rounded-[14px] bg-[#FFF0F2] border border-[#FECDD6] px-4 py-2.5 text-[12.5px] text-[#D13B56] font-semibold">
-              {manualError}
+        <form onSubmit={handleCreateOrderSubmit} className="space-y-5">
+          {createError && (
+            <div className="rounded-[14px] bg-[#FFF0F2] border border-[#FECDD6] px-4 py-2.5 text-[12.5px] text-[#D13B56] font-semibold">
+              {createError}
             </div>
           )}
-          <Field label="Storefront Channel" required>
-            <select
-              value={manualForm.store}
-              onChange={(e) => setManualForm({ ...manualForm, store: e.target.value })}
-              className={inputClass}
-            >
-              {stores.map((st) => (
-                <option key={st.id} value={st.name}>
-                  {st.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-          <Field label="Buyer Full Name" required>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+            <Field label="Order Number (Optional)" hint="Auto-generated if left blank">
+              <input
+                type="text"
+                data-testid="create-order-number"
+                value={createForm.orderNumber}
+                onChange={(e) => setCreateForm({ ...createForm, orderNumber: e.target.value })}
+                placeholder="ORD-30101"
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Order Source">
+              <select
+                value={createForm.source}
+                onChange={(e) => setCreateForm({ ...createForm, source: e.target.value })}
+                className={inputClass}
+              >
+                <option value="MANUAL">MANUAL</option>
+                <option value="SHOPIFY">SHOPIFY</option>
+                <option value="WOOCOMMERCE">WOOCOMMERCE</option>
+              </select>
+            </Field>
+            <Field label="Payment Method" required>
+              <select
+                value={createForm.paymentMethod}
+                onChange={(e) => {
+                  const method = e.target.value;
+                  setCreateForm({
+                    ...createForm,
+                    paymentMethod: method,
+                    paymentStatus: method === 'COD' ? 'PENDING' : 'PAID',
+                  });
+                }}
+                className={inputClass}
+              >
+                <option value="COD">COD (Cash on Delivery)</option>
+                <option value="PREPAID">PREPAID</option>
+                <option value="UPI">UPI</option>
+                <option value="CARD">CARD</option>
+                <option value="NETBANKING">NETBANKING</option>
+              </select>
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+            <Field label="Customer Full Name" required>
+              <input
+                type="text"
+                data-testid="create-customer-name"
+                value={createForm.customerName}
+                onChange={(e) => setCreateForm({ ...createForm, customerName: e.target.value })}
+                placeholder="Rahul Sharma"
+                className={inputClass}
+                required
+              />
+            </Field>
+            <Field label="Customer Phone" required>
+              <input
+                type="text"
+                data-testid="create-customer-phone"
+                value={createForm.customerPhone}
+                onChange={(e) => setCreateForm({ ...createForm, customerPhone: e.target.value })}
+                placeholder="9811456723"
+                className={inputClass}
+                required
+              />
+            </Field>
+            <Field label="Customer Email">
+              <input
+                type="email"
+                value={createForm.customerEmail}
+                onChange={(e) => setCreateForm({ ...createForm, customerEmail: e.target.value })}
+                placeholder="rahul@example.in"
+                className={inputClass}
+              />
+            </Field>
+          </div>
+
+          <Field label="Shipping Address" required>
             <input
               type="text"
-              value={manualForm.customerName}
-              onChange={(e) => setManualForm({ ...manualForm, customerName: e.target.value })}
-              placeholder="e.g., Aditi Kulkarni"
+              data-testid="create-shipping-address"
+              value={createForm.shippingAddress}
+              onChange={(e) => setCreateForm({ ...createForm, shippingAddress: e.target.value })}
+              placeholder="Plot 42, Shyam Nagar, Near Metro Pillar 78, Jaipur 302019"
               className={inputClass}
+              required
             />
           </Field>
-          <Field label="10-Digit Mobile">
-            <input
-              type="text"
-              value={manualForm.phone}
-              onChange={(e) => setManualForm({ ...manualForm, phone: e.target.value })}
-              placeholder="9811223344"
-              className={inputClass}
-            />
-          </Field>
-          <Field label="SKU / Product Name">
-            <input
-              type="text"
-              value={manualForm.skuName}
-              onChange={(e) => setManualForm({ ...manualForm, skuName: e.target.value })}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Order Value (INR)" required>
-            <input
-              type="number"
-              value={manualForm.orderValue}
-              onChange={(e) => setManualForm({ ...manualForm, orderValue: e.target.value })}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Payment Mode" required>
-            <select
-              value={manualForm.paymentMode}
-              onChange={(e) => setManualForm({ ...manualForm, paymentMode: e.target.value })}
-              className={inputClass}
-            >
-              <option value="COD">COD (Cash on Delivery)</option>
-              <option value="Prepaid">Prepaid</option>
-            </select>
-          </Field>
-          <Field label="Street Address Line 1" required className="sm:col-span-2">
-            <input
-              type="text"
-              value={manualForm.line1}
-              onChange={(e) => setManualForm({ ...manualForm, line1: e.target.value })}
-              placeholder="Plot / Flat / Colony (leave short to test ADDRESS_INCOMPLETE)"
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Delivery Landmark (Optional)" hint="Leave blank to trigger Address Clarification">
-            <input
-              type="text"
-              value={manualForm.landmark}
-              onChange={(e) => setManualForm({ ...manualForm, landmark: e.target.value })}
-              placeholder="Near Metro Pillar 40"
-              className={inputClass}
-            />
-          </Field>
-          <Field label="Courier Partner">
-            <select
-              value={manualForm.courier}
-              onChange={(e) => setManualForm({ ...manualForm, courier: e.target.value })}
-              className={inputClass}
-            >
-              <option value="Delhivery">Delhivery</option>
-              <option value="Shiprocket">Shiprocket</option>
-              <option value="BlueDart">BlueDart</option>
-              <option value="Xpressbees">Xpressbees</option>
-            </select>
-          </Field>
-          <Field label="City" required>
-            <input
-              type="text"
-              value={manualForm.city}
-              onChange={(e) => setManualForm({ ...manualForm, city: e.target.value })}
-              className={inputClass}
-            />
-          </Field>
-          <Field label="PIN Code" required>
-            <input
-              type="text"
-              value={manualForm.pincode}
-              onChange={(e) => setManualForm({ ...manualForm, pincode: e.target.value })}
-              className={inputClass}
-            />
-          </Field>
+
+          {/* Order Items Builder */}
+          <div className="rounded-[18px] bg-[#F9FAFB] border border-[#E3E6FA] p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="font-display text-[13px] font-bold text-[#465478]">
+                Order Line Items
+              </span>
+              <Button type="button" variant="outline" size="xs" onClick={addLineItem}>
+                <Plus className="w-3 h-3" /> Add Item
+              </Button>
+            </div>
+
+            {createForm.items.map((item, idx) => (
+              <div
+                key={idx}
+                className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end bg-white p-3 rounded-[14px] border border-[#DFE1F5]"
+              >
+                <div className="sm:col-span-5">
+                  <Field label="Product Name" required>
+                    <input
+                      type="text"
+                      value={item.productName}
+                      onChange={(e) => updateLineItem(idx, 'productName', e.target.value)}
+                      placeholder="Product Name"
+                      className={inputClass}
+                    />
+                  </Field>
+                </div>
+                <div className="sm:col-span-3">
+                  <Field label="SKU" required>
+                    <input
+                      type="text"
+                      value={item.sku}
+                      onChange={(e) => updateLineItem(idx, 'sku', e.target.value)}
+                      placeholder="SKU-01"
+                      className={inputClass}
+                    />
+                  </Field>
+                </div>
+                <div className="sm:col-span-2">
+                  <Field label="Qty" required>
+                    <input
+                      type="number"
+                      min="1"
+                      value={item.quantity}
+                      onChange={(e) => updateLineItem(idx, 'quantity', e.target.value)}
+                      className={inputClass}
+                    />
+                  </Field>
+                </div>
+                <div className="sm:col-span-2 flex items-center gap-1.5">
+                  <Field label="Unit ₹" required className="flex-1">
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={item.unitPrice}
+                      onChange={(e) => updateLineItem(idx, 'unitPrice', e.target.value)}
+                      className={inputClass}
+                    />
+                  </Field>
+                  {createForm.items.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeLineItem(idx)}
+                      className="mb-1 p-2 text-[#D13B56] hover:bg-[#FFF0F2] rounded-full"
+                      aria-label="Remove item"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+            <Field label="Discount (INR)">
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={createForm.discount}
+                onChange={(e) => setCreateForm({ ...createForm, discount: e.target.value })}
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Shipping Fee (INR)">
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                value={createForm.shippingFee}
+                onChange={(e) => setCreateForm({ ...createForm, shippingFee: e.target.value })}
+                className={inputClass}
+              />
+            </Field>
+            <Field label="Customer Notes">
+              <input
+                type="text"
+                value={createForm.customerNotes}
+                onChange={(e) => setCreateForm({ ...createForm, customerNotes: e.target.value })}
+                placeholder="Optional delivery note"
+                className={inputClass}
+              />
+            </Field>
+          </div>
         </form>
       </Modal>
 
-      {/* Live CSV Batch Import Modal */}
+      {/* CSV Batch Import Modal */}
       <Modal
         open={csvModalOpen}
         onClose={() => setCsvModalOpen(false)}
-        title="Live CSV Batch Order Import"
-        subtitle="Upload a .csv file or edit the CSV rows below — runs live locally in your browser"
+        title="PostgreSQL CSV Order Import"
+        subtitle="Validates headers, phone numbers, monetary values, and duplicate order numbers with detailed row-level error reporting"
+        widthClass="max-w-3xl"
         footer={
           <>
-            <Button variant="outline" size="sm" onClick={() => setCsvText(SAMPLE_CSV)}>
-              Load Sample Rows
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setCsvText(SAMPLE_POSTGRES_CSV);
+                setCsvSummary(null);
+                setCsvError('');
+              }}
+            >
+              Load Sample CSV
             </Button>
-            <Button variant="primary" size="sm" onClick={handleImportCsv}>
-              <FileSpreadsheet className="w-4 h-4" /> Import &amp; Score CSV Batch
+            <Button
+              variant="primary"
+              size="sm"
+              loading={importingCsv}
+              data-testid="csv-import-submit-btn"
+              onClick={handleImportCsvSubmit}
+            >
+              <FileSpreadsheet className="w-4 h-4" /> Execute CSV Import
             </Button>
           </>
         }
       >
         <div className="space-y-4">
           <Hint>
-            Supported columns: <code>customerName,phone,orderValue,paymentMode,line1,landmark,city,state,pincode,courier,skuName</code>
+            Required columns:{' '}
+            <code>
+              customerName,customerPhone,productName,sku,quantity,unitPrice,paymentMethod,shippingAddress
+            </code>{' '}
+            (Optional: <code>orderNumber,customerEmail,discount,shippingFee,paymentStatus,customerNotes</code>)
           </Hint>
+
           {csvError && (
             <div className="rounded-[14px] bg-[#FFF0F2] border border-[#FECDD6] px-4 py-2.5 text-[12.5px] text-[#D13B56] font-semibold">
               {csvError}
             </div>
           )}
+
           <Field label="Upload Local .CSV File">
             <input
               type="file"
               accept=".csv,text/csv"
-              onChange={handleCsvFileChange}
+              onChange={handleCsvFileUpload}
               className="block w-full text-[12.5px] text-[#5C6888] file:mr-3 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-[12px] file:font-display file:font-bold file:bg-[#EEF0FA] file:text-[#545C9E] hover:file:bg-[#E3E6FA]"
             />
           </Field>
-          <Field label="CSV Payload Preview / Editor">
+
+          <Field label="CSV Content">
             <textarea
               rows={6}
               value={csvText}
@@ -914,24 +1402,140 @@ export function OrdersPage() {
               className={`${inputClass} font-mono text-[11.5px]`}
             />
           </Field>
+
+          {csvSummary && (
+            <div
+              data-testid="csv-import-summary"
+              className="rounded-[18px] bg-[#F9FAFB] border border-[#DFE1F5] p-4 space-y-3"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-display text-[14px] font-extrabold text-[#465478]">
+                  Import Summary: {csvSummary.importedOrdersCount} / {csvSummary.totalRowsProcessed}{' '}
+                  Rows Imported
+                </span>
+                <span
+                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-display font-bold ${
+                    csvSummary.failedRowsCount === 0
+                      ? 'bg-[#ECFEF6] text-[#17825B]'
+                      : 'bg-[#FFF5ED] text-[#D96030]'
+                  }`}
+                >
+                  {csvSummary.failedRowsCount} Failed Row(s)
+                </span>
+              </div>
+
+              {csvSummary.errors && csvSummary.errors.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="text-[11px] font-display font-bold uppercase text-[#D13B56]">
+                    Row Validation Errors (Not Imported)
+                  </div>
+                  {csvSummary.errors.map((err, idx) => (
+                    <div
+                      key={idx}
+                      className="rounded-[12px] bg-[#FFF0F2] border border-[#FECDD6] px-3 py-2 text-[12px] text-[#D13B56]"
+                    >
+                      <strong>Row #{err.rowNumber} ({err.orderNumber}):</strong> {err.errorMessage}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </Modal>
 
-      {/* Confirm Pre-Dispatch Cancel */}
+      {/* Customer Order History Modal */}
+      <Modal
+        open={customerHistoryModal.open}
+        onClose={() => setCustomerHistoryModal({ open: false, loading: false, data: null })}
+        title={
+          customerHistoryModal.data?.customer
+            ? `Customer Profile: ${customerHistoryModal.data.customer.fullName}`
+            : 'Customer Order History'
+        }
+        subtitle="Merchant-scoped customer profile and complete PostgreSQL order history"
+        footer={
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() =>
+              setCustomerHistoryModal({ open: false, loading: false, data: null })
+            }
+          >
+            Close
+          </Button>
+        }
+      >
+        {customerHistoryModal.loading || !customerHistoryModal.data ? (
+          <div className="py-10 text-center text-[13px] text-[#7C86A2]">
+            Loading customer history…
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <div className="grid grid-cols-3 gap-3">
+              <div className="rounded-[16px] bg-[#F9FAFB] border border-[#E3E6FA] p-3.5 text-center">
+                <div className="text-[10.5px] font-display font-bold uppercase text-[#8891AA]">
+                  Phone Number
+                </div>
+                <div className="font-mono text-[13.5px] font-bold text-[#465478] mt-1">
+                  +91 {customerHistoryModal.data.customer.phoneNumber}
+                </div>
+              </div>
+              <div className="rounded-[16px] bg-[#F9FAFB] border border-[#E3E6FA] p-3.5 text-center">
+                <div className="text-[10.5px] font-display font-bold uppercase text-[#8891AA]">
+                  Total Orders
+                </div>
+                <div className="font-display text-[18px] font-extrabold text-[#465478] mt-1 num">
+                  {customerHistoryModal.data.customer.totalOrders}
+                </div>
+              </div>
+              <div className="rounded-[16px] bg-[#F9FAFB] border border-[#E3E6FA] p-3.5 text-center">
+                <div className="text-[10.5px] font-display font-bold uppercase text-[#8891AA]">
+                  Total Spend
+                </div>
+                <div className="font-display text-[18px] font-extrabold text-[#17825B] mt-1 num">
+                  {formatINR(customerHistoryModal.data.customer.totalSpent, true)}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="font-display text-[12.5px] font-bold text-[#465478]">
+                Order History ({customerHistoryModal.data.recentOrders.length})
+              </div>
+              {customerHistoryModal.data.recentOrders.map((ord) => (
+                <div
+                  key={ord.id}
+                  className="rounded-[14px] border border-[#E3E6FA] bg-[#F9FAFB] px-4 py-3 flex items-center justify-between gap-3"
+                >
+                  <div>
+                    <div className="font-display text-[13.5px] font-bold text-[#465478]">
+                      {ord.orderNumber} · {ord.primaryProductSummary}
+                    </div>
+                    <div className="text-[11.5px] text-[#8891AA]">
+                      {formatDateTime(ord.createdAt)} · {ord.shippingAddress}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-display text-[13.5px] font-extrabold text-[#465478] num mb-1">
+                      {formatINR(ord.totalAmount, true)}
+                    </div>
+                    <StatusBadge status={ord.orderStatus} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </Modal>
+
       <ConfirmDialog
-        open={confirmCancelState.open}
-        onClose={() => setConfirmCancelState({ open: false, ids: [] })}
-        onConfirm={() => {
-          if (confirmCancelState.ids.length === 1) {
-            cancelOrder(confirmCancelState.ids[0]);
-          } else {
-            bulkCancelOrders(confirmCancelState.ids);
-            setSelectedIds([]);
-          }
-        }}
-        title="Cancel Order(s) Prior to Dispatch?"
-        description="Pre-dispatch cancellations avoid courier freight loss, and ORDEXA tracks them in a separate accounting bucket rather than inflating delivered rescue totals."
-        confirmLabel="Confirm Pre-Dispatch Cancel"
+        open={Boolean(confirmDeleteOrder)}
+        onClose={() => setConfirmDeleteOrder(null)}
+        onConfirm={handleDeleteOrder}
+        title={`Delete Order ${confirmDeleteOrder?.orderNumber}?`}
+        description="Safe deletion policy: Only orders in CREATED or CANCELLED status can be deleted. This permanently removes the order from your merchant workspace."
+        confirmLabel="Delete Order"
         variant="danger"
       />
     </div>
