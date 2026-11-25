@@ -101,7 +101,11 @@ export async function apiRequest(
   } = {}
 ) {
   const baseUrl = getApiBaseUrl();
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  const rawPath = path.startsWith('/') ? path : `/${path}`;
+  const normalizedPath =
+    baseUrl.endsWith('/v1') && rawPath.startsWith('/v1/')
+      ? rawPath.slice(3)
+      : rawPath;
 
   const requestHeaders = {
     Accept: 'application/json',

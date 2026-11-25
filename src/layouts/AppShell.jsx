@@ -8,7 +8,7 @@ export function AppShell() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   return (
-    <div className="min-h-screen flex bg-[#F9FAFB] text-[#465478] relative overflow-x-clip">
+    <div className="min-h-screen flex items-start bg-[#F9FAFB] text-[#465478] relative">
       {/* Subtle Top-Right Pastel Ambient Glow matching Rescale Canvas */}
       <div
         className="pointer-events-none fixed -top-32 right-0 w-[520px] h-[520px] rounded-full opacity-45 blur-3xl"

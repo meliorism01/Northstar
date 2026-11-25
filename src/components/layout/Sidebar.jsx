@@ -234,7 +234,9 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }) {
 
   return (
     <>
-      <aside className="hidden lg:block flex-shrink-0">{sidebarBody}</aside>
+      <aside className="hidden lg:block flex-shrink-0 sticky top-0 h-screen z-30 border-r border-[#EEF0FA]">
+        {sidebarBody}
+      </aside>
       {mobileOpen && (
         <div
           className="fixed inset-0 z-50 lg:hidden flex bg-[#192038]/30 backdrop-blur-xs"
