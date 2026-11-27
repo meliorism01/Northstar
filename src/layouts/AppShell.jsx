@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom';
 import { Sidebar } from '../components/layout/Sidebar';
 import { TopHeader } from '../components/layout/TopHeader';
 import { ToastContainer } from '../components/ui/Primitives';
+import { ErrorBoundary } from '../components/common/ErrorBoundary';
 
 export function AppShell() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -28,12 +29,16 @@ export function AppShell() {
         <TopHeader onOpenMobileNav={() => setMobileNavOpen(true)} />
         <main className="flex-1 px-4 sm:px-8 pb-12 pt-2">
           <div className="max-w-[1400px] mx-auto">
-            <Outlet />
+            <ErrorBoundary title="View Rendering Error">
+              <Outlet />
+            </ErrorBoundary>
           </div>
         </main>
       </div>
 
-      <ToastContainer />
+      <ErrorBoundary fallback={null}>
+        <ToastContainer />
+      </ErrorBoundary>
     </div>
   );
 }

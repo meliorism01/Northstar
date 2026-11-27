@@ -7,6 +7,7 @@ import {
   Loader2,
   ArrowUpRight,
   ArrowDownRight,
+  XCircle,
 } from 'lucide-react';
 import { getAttentionStyles, getStatusStyles } from '../../utils/formatters';
 import { useOrdexaStore } from '../../store/useOrdexaStore';
@@ -749,26 +750,98 @@ export function ToastContainer() {
   return (
     <div className="fixed bottom-5 right-5 z-[60] flex flex-col gap-2.5 max-w-sm w-full pointer-events-none px-4 sm:px-0">
       {toasts.map((t) => {
+        if (!t || typeof t !== 'object') return null;
+
+        // Safely extract title, message, and tone/type
+        let rawTitle = '';
+        let rawMessage = '';
+        let rawTone = 'info';
+
+        if (typeof t.message === 'object' && t.message !== null) {
+          if (t.message.title !== undefined || t.message.message !== undefined) {
+            rawTitle = t.message.title || t.title || '';
+            rawMessage = t.message.message != null ? t.message.message : '';
+            rawTone = t.message.tone || t.message.type || t.tone || t.type || 'info';
+          } else if (t.message instanceof Error || typeof t.message.message === 'string') {
+            rawTitle = t.title || '';
+            rawMessage = t.message.message;
+            rawTone = t.tone || t.type || 'danger';
+          } else {
+            rawTitle = t.title || '';
+            rawMessage = JSON.stringify(t.message);
+            rawTone = t.tone || t.type || 'info';
+          }
+        } else {
+          rawTitle = t.title || '';
+          rawMessage = t.message != null ? t.message : '';
+          rawTone = t.tone || t.type || 'info';
+        }
+
+        // Guarantee primitives (never render raw objects as React children)
+        const safeTitle =
+          typeof rawTitle === 'string'
+            ? rawTitle.trim()
+            : typeof rawTitle === 'number'
+            ? String(rawTitle)
+            : '';
+
+        const safeMessage =
+          typeof rawMessage === 'string'
+            ? rawMessage.trim()
+            : typeof rawMessage === 'number'
+            ? String(rawMessage)
+            : rawMessage && typeof rawMessage === 'object'
+            ? JSON.stringify(rawMessage)
+            : '';
+
+        const tone =
+          typeof rawTone === 'string' ? rawTone.toLowerCase().trim() : 'info';
+
+        const hasTitle = Boolean(safeTitle);
+        const hasMessage = Boolean(safeMessage);
+        if (!hasTitle && !hasMessage) return null;
+
         const icon =
-          t.type === 'success' ? (
+          tone === 'success' ? (
             <CheckCircle2 className="w-4 h-4 text-[#2EB37E] flex-shrink-0" />
-          ) : t.type === 'warning' ? (
+          ) : tone === 'warning' ? (
             <AlertTriangle className="w-4 h-4 text-[#FA6E43] flex-shrink-0" />
+          ) : tone === 'danger' || tone === 'error' ? (
+            <XCircle className="w-4 h-4 text-[#E11D48] flex-shrink-0" />
           ) : (
             <Info className="w-4 h-4 text-[#7584D6] flex-shrink-0" />
           );
+
         return (
           <div
             key={t.id}
-            className="pointer-events-auto bg-white text-[#465478] border border-[#DFE1F5] rounded-full shadow-rescale-hover px-4 py-3 flex items-center justify-between gap-3 text-[12.5px] font-display font-semibold animate-fade-up"
+            role="status"
+            className={`pointer-events-auto bg-white/95 backdrop-blur-md text-[#465478] border border-[#DFE1F5] shadow-rescale-hover px-4 py-3 flex items-start sm:items-center justify-between gap-3 text-[12.5px] font-display animate-fade-up ${
+              hasTitle && hasMessage ? 'rounded-[18px]' : 'rounded-full'
+            }`}
           >
-            <div className="flex items-center gap-2.5 min-w-0">
-              {icon}
-              <span className="truncate">{t.message}</span>
+            <div className="flex items-start sm:items-center gap-2.5 min-w-0 flex-1">
+              <div className="mt-0.5 sm:mt-0 flex-shrink-0">{icon}</div>
+              <div className="min-w-0 flex-1 flex flex-col">
+                {hasTitle && (
+                  <span className="font-bold text-[13px] text-[#2C344E] leading-tight truncate">
+                    {safeTitle}
+                  </span>
+                )}
+                {hasMessage && (
+                  <span
+                    className={`text-[#55647A] leading-snug truncate ${
+                      hasTitle ? 'text-[12px] font-normal mt-0.5' : 'font-semibold'
+                    }`}
+                  >
+                    {safeMessage}
+                  </span>
+                )}
+              </div>
             </div>
             <button
               onClick={() => dismissToast(t.id)}
-              className="text-[#9CA5BD] hover:text-[#465478] flex-shrink-0"
+              className="text-[#9CA5BD] hover:text-[#465478] flex-shrink-0 mt-0.5 sm:mt-0 p-0.5"
               aria-label="Dismiss notification"
             >
               <X className="w-3.5 h-3.5" />

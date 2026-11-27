@@ -39,6 +39,51 @@ export const REASON_CODE_META = {
     severity: 'high',
     description: 'Two or more prior COD refusals recorded within this merchant workspace.',
   },
+  CALL_CONFIRMED_INTENT: {
+    label: 'AI Call Confirmed by Buyer',
+    severity: 'low',
+    description: 'Customer explicitly confirmed COD order details and delivery availability on voice call.',
+  },
+  CALL_DENIED_ORDER: {
+    label: 'Buyer Denied Placing Order',
+    severity: 'high',
+    description: 'Customer explicitly denied placing this order during AI verification call.',
+  },
+  CALL_CANCELLATION_INTENT: {
+    label: 'Cancellation Requested on Call',
+    severity: 'high',
+    description: 'Customer requested order cancellation during AI verification call.',
+  },
+  CALL_UNANSWERED_NEUTRAL: {
+    label: 'Call Unanswered (Neutral Signal)',
+    severity: 'low',
+    description: 'Unanswered verification call is inconclusive and does not indicate fraud.',
+  },
+  REPEATED_UNANSWERED_CALLS: {
+    label: 'All Verification Attempts Unanswered',
+    severity: 'medium',
+    description: 'Customer did not answer across multiple scheduled voice attempts; review recommended.',
+  },
+  CALL_INVALID_PHONE_NUMBER: {
+    label: 'Invalid / Unreachable Phone Number',
+    severity: 'high',
+    description: 'Phone number failed carrier validation; courier last-mile contact will likely fail.',
+  },
+  CALL_REQUIRES_HUMAN_FOLLOWUP: {
+    label: 'Requires Human Specialist Follow-Up',
+    severity: 'medium',
+    description: 'Buyer requested a live support specialist or gave an inconclusive response.',
+  },
+  HISTORICAL_CALL_RELIABLE: {
+    label: 'Consistent Historical Voice Confirmations',
+    severity: 'low',
+    description: 'Customer has repeatedly confirmed prior COD calls with zero denials.',
+  },
+  HISTORICAL_CONFIRMATION_FAILURE: {
+    label: 'Repeated Historical Call Denials',
+    severity: 'high',
+    description: 'Customer denied or cancelled multiple previous COD verification calls.',
+  },
 };
 
 export const INTERVENTION_CATALOG = {
@@ -129,6 +174,47 @@ export function evaluateOrderRisk(order, customer, rules = {}) {
   if (!isCOD) {
     riskPoints = Math.max(0, riskPoints - 30);
   }
+
+  // Pillar 3 & 4: AI Calling Outcome & Historical Confirmation Signals
+  // (NOTE: RTO risk NEVER gates initial COD call eligibility; calling signals refine risk after dialing.)
+  let callingOutcomePoints = 0;
+  let historicalConfirmationPoints = 0;
+  const callOutcome = order.callOutcome || null;
+  if (callOutcome === 'CONFIRMED') {
+    callingOutcomePoints -= 18;
+    reasonCodes.push('CALL_CONFIRMED_INTENT');
+  } else if (callOutcome === 'REJECTED') {
+    callingOutcomePoints += 55;
+    reasonCodes.push('CALL_DENIED_ORDER');
+  } else if (callOutcome === 'CANCELLATION_REQUESTED') {
+    callingOutcomePoints += 40;
+    reasonCodes.push('CALL_CANCELLATION_INTENT');
+  } else if (callOutcome === 'INVALID_NUMBER') {
+    callingOutcomePoints += 35;
+    reasonCodes.push('CALL_INVALID_PHONE_NUMBER');
+  } else if (callOutcome === 'HUMAN_ESCALATION' || callOutcome === 'UNCERTAIN') {
+    callingOutcomePoints += 12;
+    reasonCodes.push('CALL_REQUIRES_HUMAN_FOLLOWUP');
+  } else if (callOutcome === 'NO_ANSWER' || callOutcome === 'BUSY') {
+    if ((order.callAttemptCount ?? 0) >= (order.callMaxAttempts ?? 3)) {
+      callingOutcomePoints += 15;
+      reasonCodes.push('REPEATED_UNANSWERED_CALLS');
+    } else {
+      reasonCodes.push('CALL_UNANSWERED_NEUTRAL');
+    }
+  }
+
+  const priorConfirmedCalls = customer?.priorConfirmedCalls ?? 0;
+  const priorNegativeCalls = customer?.priorNegativeCalls ?? 0;
+  if (priorConfirmedCalls >= 2 && priorNegativeCalls === 0) {
+    historicalConfirmationPoints -= 12;
+    reasonCodes.push('HISTORICAL_CALL_RELIABLE');
+  } else if (priorNegativeCalls >= 2) {
+    historicalConfirmationPoints += 18;
+    reasonCodes.push('HISTORICAL_CONFIRMATION_FAILURE');
+  }
+
+  riskPoints = Math.max(0, Math.min(100, riskPoints + callingOutcomePoints + historicalConfirmationPoints));
 
   let attentionLevel = 'LOW';
   if (riskPoints >= 55) {

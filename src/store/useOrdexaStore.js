@@ -70,20 +70,58 @@ export const useOrdexaStore = create(
 
       // Non-persisted toast notifications
       toasts: [],
-      addToast: (message, type = 'info') => {
+      addToast: (input, typeOrTone = 'info') => {
         const id = `TOAST-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        let title = '';
+        let message = '';
+        let tone = 'info';
+
+        if (typeof input === 'string') {
+          message = input;
+          tone = typeOrTone || 'info';
+        } else if (input && typeof input === 'object') {
+          title = typeof input.title === 'string' ? input.title : '';
+          message =
+            typeof input.message === 'string'
+              ? input.message
+              : input.message != null
+              ? String(input.message)
+              : '';
+          tone = input.tone || input.type || typeOrTone || 'info';
+          if (!message && title) {
+            message = title;
+            title = '';
+          }
+        } else if (input != null) {
+          message = String(input);
+          tone = typeOrTone || 'info';
+        }
+
+        const validTone = ['success', 'warning', 'danger', 'error', 'info'].includes(tone)
+          ? tone
+          : 'info';
+
+        const toastItem = {
+          id,
+          title: title.trim(),
+          message: message.trim(),
+          tone: validTone,
+          type: validTone,
+        };
+
         set((s) => ({
-          toasts: [...s.toasts.slice(-3), { id, message, type }],
+          toasts: [...(s.toasts || []).slice(-4), toastItem],
         }));
+
         setTimeout(() => {
           set((s) => ({
-            toasts: s.toasts.filter((t) => t.id !== id),
+            toasts: (s.toasts || []).filter((t) => t.id !== id),
           }));
-        }, 3600);
+        }, 4500);
       },
       dismissToast: (id) =>
         set((s) => ({
-          toasts: s.toasts.filter((t) => t.id !== id),
+          toasts: (s.toasts || []).filter((t) => t.id !== id),
         })),
 
       setGlobalSearch: (q) => set({ globalSearch: q }),
