@@ -9,6 +9,8 @@ import { AppShell } from './layouts/AppShell';
 import { DashboardPage } from './pages/DashboardPage';
 import { OrdersPage } from './pages/OrdersPage';
 import { CustomerGraphPage } from './pages/CustomerGraphPage';
+import { CallingIntelligencePage } from './pages/CallingIntelligencePage';
+import { InterventionsPage } from './pages/InterventionsPage';
 import { RescueCentrePage } from './pages/RescueCentrePage';
 import { NdrRecoveryPage } from './pages/NdrRecoveryPage';
 import { AnalyticsPage } from './pages/AnalyticsPage';
@@ -42,6 +44,8 @@ export default function App() {
           <Route index element={<Navigate to="/app/dashboard" replace />} />
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="orders" element={<OrdersPage />} />
+          <Route path="interventions" element={<InterventionsPage />} />
+          <Route path="calling" element={<CallingIntelligencePage />} />
           <Route path="graph" element={<CustomerGraphPage />} />
           <Route path="rescue" element={<RescueCentrePage />} />
           <Route path="ndr" element={<NdrRecoveryPage />} />

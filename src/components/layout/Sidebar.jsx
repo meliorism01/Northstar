@@ -3,6 +3,8 @@ import { NavLink, Link, useNavigate } from 'react-router-dom';
 import {
   LayoutGrid,
   PackageCheck,
+  Compass,
+  PhoneCall,
   GitFork,
   ShieldCheck,
   Truck,
@@ -49,6 +51,8 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }) {
   const navItems = [
     { to: '/app/dashboard', label: 'Dashboard', icon: LayoutGrid },
     { to: '/app/orders', label: 'Order Management', icon: PackageCheck, badge: pendingOrdersCount },
+    { to: '/app/interventions', label: 'NBIE Interventions', icon: Compass },
+    { to: '/app/calling', label: 'Calling Intelligence', icon: PhoneCall },
     { to: '/app/graph', label: 'Customer Intelligence', icon: GitFork },
     { to: '/app/rescue', label: 'AI RTO Rescue', icon: ShieldCheck, badge: rescueQueueCount, accent: 'coral' },
     { to: '/app/ndr', label: 'NDR Recovery', icon: Truck, badge: openNdrCount },
