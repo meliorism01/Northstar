@@ -1,0 +1,10 @@
+package com.ordexa.intervention.model;
+
+public enum EvaluationStatus {
+    COMPLETED,
+    ASSESSMENT_UNAVAILABLE,
+    ASSESSMENT_STALE_REFRESH_REQUIRED,
+    NOT_APPLICABLE_POST_DISPATCH,
+    NOT_APPLICABLE_CANCELLED,
+    POLICY_DISABLED
+}
