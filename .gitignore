@@ -1,5 +1,6 @@
-# Frontend dependencies & build artifacts
+# Frontend & voice-service dependencies & build artifacts
 node_modules/
+voice-service/node_modules/
 dist/
 
 # Environment & secrets (never commit real credentials)

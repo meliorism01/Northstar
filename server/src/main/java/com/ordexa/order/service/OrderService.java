@@ -2,6 +2,7 @@ package com.ordexa.order.service;
 
 import com.ordexa.auth.entity.AuditLog;
 import com.ordexa.auth.token.AuditLogRepository;
+import com.ordexa.calling.events.OrderCreatedForCallingEvent;
 import com.ordexa.common.exception.ErrorCode;
 import com.ordexa.common.exception.OrdexaException;
 import com.ordexa.common.exception.ResourceNotFoundException;
@@ -71,6 +72,7 @@ public class OrderService {
     private final CustomerService customerService;
     private final CustomerBehaviouralEventRepository behaviouralEventRepository;
     private final AuditLogRepository auditLogRepository;
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
     private final Clock clock;
 
     public OrderService(
@@ -81,6 +83,7 @@ public class OrderService {
             CustomerService customerService,
             CustomerBehaviouralEventRepository behaviouralEventRepository,
             AuditLogRepository auditLogRepository,
+            org.springframework.context.ApplicationEventPublisher eventPublisher,
             Clock clock) {
         this.orderRepository = orderRepository;
         this.orderItemRepository = orderItemRepository;
@@ -89,6 +92,7 @@ public class OrderService {
         this.customerService = customerService;
         this.behaviouralEventRepository = behaviouralEventRepository;
         this.auditLogRepository = auditLogRepository;
+        this.eventPublisher = eventPublisher;
         this.clock = clock;
     }
 
@@ -255,6 +259,10 @@ public class OrderService {
                 saved.getId().toString(),
                 "Created order " + saved.getOrderNumber() + " (" + totalAmount + " " + saved.getCurrency() + ")",
                 clientIp));
+
+        if (eventPublisher != null) {
+            eventPublisher.publishEvent(new OrderCreatedForCallingEvent(merchantId, saved.getId()));
+        }
 
         return toDetailDto(saved, saved.getItems(), saved.getStatusHistory());
     }

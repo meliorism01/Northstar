@@ -1,0 +1,13 @@
+{
+  "id": "northstar-cod-verify",
+  "name": "NORTHSTAR COD Order Verification Agent (Priya)",
+  "defaultLanguage": "hi-IN",
+  "languages": ["hi-IN", "en-IN", "ta-IN", "te-IN", "bn-IN", "mr-IN", "gu-IN"],
+  "terminalTools": [
+    "confirm_order",
+    "reject_order",
+    "request_cancellation",
+    "escalate_to_human",
+    "mark_uncertain"
+  ]
+}

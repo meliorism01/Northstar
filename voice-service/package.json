@@ -1,0 +1,22 @@
+{
+  "name": "northstar-voice-service",
+  "version": "1.0.0",
+  "description": "NORTHSTAR Stateless AI Voice Gateway & LiveKit/Sarvam Worker for COD Order Verification",
+  "private": true,
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "worker": "node src/livekit-worker.js start"
+  },
+  "dependencies": {
+    "@livekit/agents": "^1.2.6",
+    "@livekit/agents-plugin-elevenlabs": "1.2.6",
+    "@livekit/agents-plugin-livekit": "^1.2.6",
+    "@livekit/agents-plugin-openai": "^1.2.6",
+    "@livekit/agents-plugin-sarvam": "^1.2.6",
+    "@livekit/agents-plugin-silero": "^1.2.6",
+    "livekit-server-sdk": "^2.15.1"
+  },
+  "license": "MIT"
+}
